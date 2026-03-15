@@ -1,5 +1,6 @@
 import { HttpClient } from './client';
 import { Analytics } from './analytics';
+import { Ecommerce } from './ecommerce';
 import { Referrals } from './referrals';
 import { Deferred } from './deferred';
 import { validateBaseUrl } from './validation';
@@ -22,6 +23,7 @@ export class Tolinku {
 
   private static client: HttpClient | null = null;
   private static analyticsInstance: Analytics | null = null;
+  private static ecommerceInstance: Ecommerce | null = null;
   private static referralsInstance: Referrals | null = null;
   private static deferredInstance: Deferred | null = null;
   private static _initialized = false;
@@ -71,6 +73,7 @@ export class Tolinku {
 
     Tolinku.client = new HttpClient(resolvedConfig);
     Tolinku.analyticsInstance = new Analytics(Tolinku.client);
+    Tolinku.ecommerceInstance = new Ecommerce(Tolinku.client, () => Tolinku._userId);
     Tolinku.referralsInstance = new Referrals(Tolinku.client);
     Tolinku.deferredInstance = new Deferred(Tolinku.client);
     Tolinku._initialized = true;
@@ -120,13 +123,24 @@ export class Tolinku {
   }
 
   /**
-   * Immediately flush all queued analytics events to the server.
+   * Immediately flush all queued analytics and ecommerce events to the server.
    */
   static async flush(): Promise<void> {
     if (!Tolinku.analyticsInstance) {
       throw new Error('Tolinku: SDK not initialized. Call Tolinku.init() first.');
     }
-    return Tolinku.analyticsInstance.flush();
+    await Promise.all([
+      Tolinku.analyticsInstance.flush(),
+      Tolinku.ecommerceInstance?.flush(),
+    ]);
+  }
+
+  /** Ecommerce: track purchases, carts, products, revenue */
+  static get ecommerce(): Ecommerce {
+    if (!Tolinku.ecommerceInstance) {
+      throw new Error('Tolinku: SDK not initialized. Call Tolinku.init() first.');
+    }
+    return Tolinku.ecommerceInstance;
   }
 
   /** Referrals: create, complete, milestone, leaderboard, claimReward */
@@ -154,9 +168,12 @@ export class Tolinku {
   static async destroy(): Promise<void> {
     debugLog('Tolinku SDK shutting down');
 
-    // Flush and clean up analytics (timer, AppState listener)
+    // Flush and clean up analytics + ecommerce (timers, AppState listeners)
     if (Tolinku.analyticsInstance) {
       await Tolinku.analyticsInstance.destroy();
+    }
+    if (Tolinku.ecommerceInstance) {
+      await Tolinku.ecommerceInstance.destroy();
     }
 
     // Abort all in-flight HTTP requests
@@ -170,6 +187,7 @@ export class Tolinku {
     // Clear all references
     Tolinku.client = null;
     Tolinku.analyticsInstance = null;
+    Tolinku.ecommerceInstance = null;
     Tolinku.referralsInstance = null;
     Tolinku.deferredInstance = null;
     Tolinku._initialized = false;
