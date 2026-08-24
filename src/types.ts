@@ -121,6 +121,10 @@ export interface ClaimBySignalsOptions {
   language?: string;
   screenWidth?: number;
   screenHeight?: number;
+  /** Defaults to `PixelRatio.get()`. Override only if you report a custom screen size. */
+  devicePixelRatio?: number;
+  /** Defaults to `Platform.Version`. Compared on the major component only. */
+  osVersion?: string;
 }
 
 /** In-app message from the API */

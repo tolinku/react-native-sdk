@@ -142,11 +142,16 @@ if (link) {
   console.log(link.deep_link_path); // e.g. "/merchant/xyz"
 }
 
-// Claim by device signal matching (auto-detects timezone, language, screen size)
+// Claim by device signal matching. Timezone, language, screen size, pixel ratio and
+// OS version are detected for you.
 const link = await Tolinku.deferred.claimBySignals({
-  appspaceId: 'your_appspace_id',
+  appspaceId: '64f0a1b2c3d4e5f60718',
 });
 ```
+
+`appspaceId` is your Appspace ID, not your subdomain or slug. Copy it from the dashboard
+under **Integrate** or **Settings**. It looks like `64f0a1b2c3d4e5f60718`.
+
 
 ### In-App Messages (React Native Component)
 
