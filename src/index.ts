@@ -36,3 +36,5 @@ export type {
   MessageComponent,
   ShowMessageOptions,
 } from './types';
+export { parseInstallReferrer, getInstallReferrerToken } from './install-referrer';
+export type { ReferrerProvider } from './install-referrer';

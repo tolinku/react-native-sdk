@@ -2,6 +2,7 @@ import { Dimensions, PixelRatio, Platform } from 'react-native';
 import type { HttpClient } from './client';
 import type { DeferredLink, ClaimBySignalsOptions } from './types';
 import { debugWarn } from './debug';
+import { getInstallReferrerToken, type ReferrerProvider } from './install-referrer';
 
 export class Deferred {
   constructor(private client: HttpClient) {}
@@ -18,6 +19,41 @@ export class Deferred {
       debugWarn(`Deferred claimByToken failed: ${(err as Error).message}`);
       return null;
     }
+  }
+
+  /**
+   * Recover the link that led to this install, trying both mechanisms.
+   *
+   * The Play Install Referrer is asked first on Android: it names the exact
+   * click, survives for days, and does not care which network the device was
+   * on. Device signals are the fallback, and the only option on iOS, where no
+   * equivalent exists.
+   *
+   * Call once on first launch. Safe to call again, but a claim is consumed the
+   * first time it succeeds, so a second call returns null.
+   *
+   * Reading the referrer needs a native Play Services binding, which this
+   * package deliberately does not bundle. Pass `referrerProvider`, or install a
+   * supported referrer package and it is used automatically. Without either,
+   * Android falls back to signal matching.
+   */
+  async claimDeferredLink(options: {
+    appspaceId: string;
+    referrerProvider?: ReferrerProvider;
+  }): Promise<DeferredLink | null> {
+    if (!options.appspaceId || !options.appspaceId.trim()) {
+      throw new Error('Tolinku: appspaceId is required and must not be blank for claimDeferredLink.');
+    }
+
+    const token = await getInstallReferrerToken(options.referrerProvider);
+    if (token) {
+      // A referrer that cannot be claimed is worth one fallback rather than an
+      // error: the install still happened.
+      const byToken = await this.claimByToken(token).catch(() => null);
+      if (byToken) return byToken;
+    }
+
+    return this.claimBySignals({ appspaceId: options.appspaceId });
   }
 
   /** Claim a deferred deep link by device signal matching */
