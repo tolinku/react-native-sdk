@@ -17,6 +17,11 @@
   `NativeModules` is read lazily so its absence in Expo Go degrades to signal
   matching rather than crashing.
 
+- `claimDeferredLink()` runs once per install and remembers it, so calling it on
+  every launch costs nothing after the first. A dropped request is not counted as
+  an answer, so a first launch without a connection retries rather than spending
+  the install's one chance at attribution.
+
 ### Fixed
 
 - `Tolinku.VERSION` and the `User-Agent` reported 0.1.0 through two releases.

@@ -2,7 +2,18 @@ import { Dimensions, PixelRatio, Platform } from 'react-native';
 import type { HttpClient } from './client';
 import type { DeferredLink, ClaimBySignalsOptions } from './types';
 import { debugWarn } from './debug';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getInstallReferrerToken, type ReferrerProvider } from './install-referrer';
+
+/**
+ * Marks that a deferred claim already ran on this install.
+ *
+ * Claiming is a first-launch action, but nothing stops an app calling it every
+ * launch, which is an easy mistake. Each repeat costs a request and records a
+ * miss, so a healthy integration would report a match rate near zero.
+ * Remembering the attempt belongs here rather than in every integrator's code.
+ */
+const CLAIMED_KEY = 'tolinku_deferred_claimed';
 
 export class Deferred {
   constructor(private client: HttpClient) {}
@@ -40,20 +51,49 @@ export class Deferred {
   async claimDeferredLink(options: {
     appspaceId: string;
     referrerProvider?: ReferrerProvider;
+    /** Claim again even if an attempt was already recorded. For tests. */
+    force?: boolean;
   }): Promise<DeferredLink | null> {
     if (!options.appspaceId || !options.appspaceId.trim()) {
       throw new Error('Tolinku: appspaceId is required and must not be blank for claimDeferredLink.');
     }
+
+    if (!options.force && (await this.alreadyAttempted())) return null;
 
     const token = await getInstallReferrerToken(options.referrerProvider);
     if (token) {
       // A referrer that cannot be claimed is worth one fallback rather than an
       // error: the install still happened.
       const byToken = await this.claimByToken(token).catch(() => null);
-      if (byToken) return byToken;
+      if (byToken) {
+        await this.rememberAttempt();
+        return byToken;
+      }
     }
 
-    return this.claimBySignals({ appspaceId: options.appspaceId });
+    const { link, settled } = await this.attemptSignals({ appspaceId: options.appspaceId });
+    // Only a real answer is remembered. A dropped request leaves this unwritten
+    // so the next launch tries again: losing an install's attribution to one
+    // bad connection is worse than one extra request.
+    if (settled) await this.rememberAttempt();
+    return link;
+  }
+
+  private async alreadyAttempted(): Promise<boolean> {
+    try {
+      return (await AsyncStorage.getItem(CLAIMED_KEY)) !== null;
+    } catch {
+      // Storage unavailable: attempt the claim rather than skip it.
+      return false;
+    }
+  }
+
+  private async rememberAttempt(): Promise<void> {
+    try {
+      await AsyncStorage.setItem(CLAIMED_KEY, new Date().toISOString());
+    } catch {
+      // Not worth failing a claim that already succeeded.
+    }
   }
 
   /** Claim a deferred deep link by device signal matching */
@@ -61,7 +101,21 @@ export class Deferred {
     if (!options.appspaceId || !options.appspaceId.trim()) {
       throw new Error('Tolinku: appspaceId is required and must not be blank for claimBySignals.');
     }
+    return (await this.attemptSignals(options)).link;
+  }
 
+  /**
+   * The signal claim, with whether the server actually answered.
+   *
+   * `settled` separates "nothing is waiting for this device", which no amount
+   * of asking will change, from "the request never got there". Both surface as
+   * null to callers of claimBySignals, but claimDeferredLink has to tell them
+   * apart: recording an attempt that never reached the server would spend an
+   * install's one chance at attribution on a dropped connection.
+   */
+  private async attemptSignals(
+    options: ClaimBySignalsOptions,
+  ): Promise<{ link: DeferredLink | null; settled: boolean }> {
     try {
       const { width, height } = Dimensions.get('screen');
       const resolvedTimezone = options.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -76,7 +130,7 @@ export class Deferred {
           : undefined) ||
         'en';
 
-      return await this.client.postPublic<DeferredLink>('/v1/api/deferred/claim-by-signals', {
+      const link = await this.client.postPublic<DeferredLink>('/v1/api/deferred/claim-by-signals', {
         appspace_id: options.appspaceId,
         timezone: resolvedTimezone,
         language: resolvedLanguage,
@@ -86,6 +140,7 @@ export class Deferred {
         device_pixel_ratio: options.devicePixelRatio || PixelRatio.get(),
         os_version: options.osVersion || String(Platform.Version),
       });
+      return { link, settled: true };
     } catch (err) {
       // A 404 is the ordinary "nothing waiting for this device" outcome. Anything
       // else is a configuration problem the integrator has to see: in particular a
@@ -94,9 +149,10 @@ export class Deferred {
       const status = (err as { statusCode?: number; status?: number })?.statusCode
         ?? (err as { status?: number })?.status;
       if (status === 404) {
-        // Nothing is waiting for this device. The ordinary outcome, not a fault.
+        // Nothing is waiting for this device. The ordinary outcome, not a fault,
+        // and a final one: asking again cannot change it.
         debugWarn('Deferred claimBySignals: no match for this device.');
-        return null;
+        return { link: null, settled: true };
       }
       if (status === 403) {
         console.warn(
@@ -104,10 +160,10 @@ export class Deferred {
           'Appspace ID (copy it from the dashboard under Settings), not your subdomain ' +
           `or slug. ${(err as Error).message}`,
         );
-        return null;
+        return { link: null, settled: false };
       }
       debugWarn(`Deferred claimBySignals failed: ${(err as Error).message}`);
-      return null;
+      return { link: null, settled: false };
     }
   }
 }
