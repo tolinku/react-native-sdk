@@ -30,6 +30,17 @@ jobs:
           java-version: '17'
       - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          # Pinned because the action installs the newest Gradle, and the module
+          # declares AGP 8.1.4, which does not run on Gradle 9. Left unpinned it
+          # fails while evaluating the build file, which reads like a fault in
+          # this module rather than a version pair that cannot work together.
+          #
+          # 8.5 is what the Android SDK's own wrapper uses, so this compiles the
+          # module the same way it is compiled by hand. Inside a host app the
+          # app's wrapper decides, which is the whole reason the React Native
+          # dependency here is left unversioned.
+          gradle-version: '8.5'
       - name: Compile the install referrer module
         run: |
           # The module has no settings.gradle of its own: inside a host app it is
