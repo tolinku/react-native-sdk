@@ -19,13 +19,19 @@ export class Deferred {
   constructor(private client: HttpClient) {}
 
   /** Claim a deferred deep link by referrer token (from Play Store referrer or clipboard) */
-  async claimByToken(token: string): Promise<DeferredLink | null> {
+  async claimByToken(token: string, appspaceId?: string): Promise<DeferredLink | null> {
     if (!token || !token.trim()) {
       throw new Error('Tolinku: token is required and must not be blank for claimByToken.');
     }
 
     try {
-      return await this.client.getPublic<DeferredLink>('/v1/api/deferred/claim', { token });
+      // appspaceId narrows what the token may claim, never widens it, and it is
+      // what lets a failed claim be attributed: the default host resolves to no
+      // Appspace, so without it a miss belongs to nobody and goes uncounted.
+      return await this.client.getPublic<DeferredLink>('/v1/api/deferred/claim', {
+        token,
+        ...(appspaceId ? { appspace_id: appspaceId } : {}),
+      });
     } catch (err) {
       debugWarn(`Deferred claimByToken failed: ${(err as Error).message}`);
       return null;
@@ -64,7 +70,7 @@ export class Deferred {
     if (token) {
       // A referrer that cannot be claimed is worth one fallback rather than an
       // error: the install still happened.
-      const byToken = await this.claimByToken(token).catch(() => null);
+      const byToken = await this.claimByToken(token, options.appspaceId).catch(() => null);
       if (byToken) {
         await this.rememberAttempt();
         return byToken;
