@@ -14,7 +14,8 @@
   },
   "files": [
     "dist",
-    "android"
+    "android/build.gradle",
+    "android/src"
   ],
   "scripts": {
     "build": "tsup",

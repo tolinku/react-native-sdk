@@ -3,3 +3,10 @@ dist/
 *.tsbuildinfo
 .DS_Store
 .claude/
+
+# Gradle leaves these in android/ after any build, including the standalone
+# compile check documented in android/build.gradle. They were neither ignored
+# here nor excluded from the package, so building before publishing put 1,200
+# files of caches and intermediates into the tarball.
+android/build/
+android/.gradle/
