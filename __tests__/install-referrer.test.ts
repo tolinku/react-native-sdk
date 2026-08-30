@@ -54,3 +54,67 @@ describe('parseInstallReferrer', () => {
     expect(parseInstallReferrer('tolk_token=ABC%ZZ')).toBe('ABC%ZZ');
   });
 });
+
+/**
+ * The auto-detection glue. Shape verified against
+ * react-native-play-install-referrer@2.0.1: it exports
+ * `{ PlayInstallReferrer }`, whose `getInstallReferrerInfo(cb)` calls back with
+ * `(info, error)` and reports the string on `info.installReferrer`.
+ */
+describe('getInstallReferrerToken', () => {
+  const load = () => require('../src/install-referrer').getInstallReferrerToken;
+
+  beforeEach(() => {
+    jest.resetModules();
+    jest.doMock('react-native', () => ({ Platform: { OS: 'android' } }));
+  });
+  afterEach(() => jest.resetModules());
+
+  it('reads the token from the installed package', async () => {
+    jest.doMock(
+      'react-native-play-install-referrer',
+      () => ({
+        PlayInstallReferrer: {
+          getInstallReferrerInfo: (cb: (i: unknown, e: unknown) => void) =>
+            cb({ installReferrer: 'utm_source=x&tolk_token=FROM_PLAY' }, null),
+        },
+      }),
+      { virtual: true },
+    );
+    await expect(load()()).resolves.toBe('FROM_PLAY');
+  });
+
+  it('returns null when Play reports an error', async () => {
+    jest.doMock(
+      'react-native-play-install-referrer',
+      () => ({
+        PlayInstallReferrer: {
+          getInstallReferrerInfo: (cb: (i: unknown, e: unknown) => void) =>
+            cb(null, { message: 'SERVICE_UNAVAILABLE', responseCode: 1 }),
+        },
+      }),
+      { virtual: true },
+    );
+    await expect(load()()).resolves.toBeNull();
+  });
+
+  it('falls back to null when no referrer package is installed', async () => {
+    await expect(load()()).resolves.toBeNull();
+  });
+
+  it('prefers an explicitly supplied provider', async () => {
+    await expect(load()(async () => 'tolk_token=EXPLICIT')).resolves.toBe('EXPLICIT');
+  });
+
+  it('never throws when the provider does', async () => {
+    await expect(load()(() => { throw new Error('boom'); })).resolves.toBeNull();
+  });
+
+  it('skips the lookup entirely on iOS', async () => {
+    jest.resetModules();
+    jest.doMock('react-native', () => ({ Platform: { OS: 'ios' } }));
+    const spy = jest.fn();
+    await expect(load()(spy)).resolves.toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
