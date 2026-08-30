@@ -35,6 +35,18 @@ export class Tolinku {
    * If init() is called a second time without calling destroy() first,
    * a warning is logged and the existing instance is returned.
    */
+  /**
+   * Configure the SDK.
+   *
+   * The name the Android, iOS and Flutter SDKs use for this. {@link init} does
+   * the same thing and still works; it is what this package shipped and
+   * breaking it would serve nobody. It is meant for deprecation later, once
+   * moving off it is a one-line change rather than a surprise.
+   */
+  static configure(config: TolinkuConfig): void {
+    Tolinku.init(config);
+  }
+
   static init(config: TolinkuConfig): void {
     if (!config.apiKey) throw new Error('Tolinku: apiKey is required');
 

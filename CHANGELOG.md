@@ -4,6 +4,17 @@
 
 ### Added
 
+- `Tolinku.configure()` initialises the SDK. The name the Android, iOS and
+  Flutter SDKs use. `Tolinku.init()` does the same thing and still works; it is
+  what this package shipped and breaking it would serve nobody. It is meant for
+  deprecation later, once moving off it is a one-line change rather than a
+  surprise.
+
+  Teardown needed nothing here: this SDK already called it `destroy()`, which is
+  now the name on all five.
+
+### Added
+
 - `claimDeferredLink()` recovers the link that led to an install, asking the Play
   Install Referrer first and falling back to device signal matching. Call it once
   on first launch instead of choosing between `claimByToken` and `claimBySignals`
