@@ -16,3 +16,26 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+
+  # The package ships Java that every Android consumer compiles, and nothing
+  # here had ever compiled it. A mistake in it would surface as a broken build
+  # in someone else's app rather than as a failure in ours.
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Compile the install referrer module
+        run: |
+          # The module has no settings.gradle of its own: inside a host app it is
+          # included by autolinking. One is written here so it can build
+          # standalone, and removed again so the tree is left unchanged.
+          printf 'rootProject.name = "tolinku-rn-android"\n' > android/settings.gradle
+          gradle -p android assembleRelease \
+            -PtolinkuReactAndroidVersion=0.73.11 -Pandroid.useAndroidX=true --no-daemon
+          rm android/settings.gradle
