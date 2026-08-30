@@ -12,5 +12,9 @@ export default defineConfig({
     'react',
     'react-native',
     '@react-native-async-storage/async-storage',
+    // Optional at runtime and absent at build time. Without this the bundler
+    // tries to resolve the require() that probes for it and fails the build,
+    // which is the opposite of optional.
+    'react-native-play-install-referrer',
   ],
 });
