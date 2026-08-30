@@ -1,0 +1,74 @@
+// Android side of @tolinku/react-native-sdk.
+//
+// Exists only to read the Play Install Referrer, which is the deterministic way
+// a deferred link survives an install on Android. It is bundled rather than
+// delegated to a third-party package because the referrer token is Tolinku's
+// own mechanism: we mint it on the link and read it back here.
+//
+// Autolinking is per-platform, so this is not built when compiling for iOS. An
+// iOS-only app pays nothing for its presence.
+//
+// To verify compilation outside a host app:
+//   printf 'rootProject.name = "t"\n' > android/settings.gradle
+//   ../../android-sdk/gradlew -p android assembleRelease \
+//       -PtolinkuReactAndroidVersion=0.73.11 -Pandroid.useAndroidX=true
+//   rm android/settings.gradle
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.1.4")
+    }
+}
+
+apply plugin: "com.android.library"
+
+def safeExtGet(prop, fallback) {
+    rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+}
+
+android {
+    // The peer range starts at React Native 0.72, whose AGP 7.4 supports
+    // namespace, so the old manifest package attribute is not needed.
+    namespace "com.tolinku.rnsdk"
+
+    compileSdkVersion safeExtGet("compileSdkVersion", 34)
+
+    defaultConfig {
+        // The Install Referrer library needs 21; the host app decides above that.
+        minSdkVersion safeExtGet("minSdkVersion", 21)
+        targetSdkVersion safeExtGet("targetSdkVersion", 34)
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    lintOptions {
+        abortOnError false
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+}
+
+dependencies {
+    // Unversioned on purpose: the React Native Gradle plugin in the host app
+    // pins this to whatever version the app is on, so the library follows the
+    // app rather than forcing one. A version is supplied only for the standalone
+    // build used to verify compilation outside an app.
+    def rnVersion = project.findProperty("tolinkuReactAndroidVersion")
+    if (rnVersion) {
+        implementation "com.facebook.react:react-android:${rnVersion}"
+    } else {
+        implementation "com.facebook.react:react-android"
+    }
+
+    implementation "com.android.installreferrer:installreferrer:2.2"
+}

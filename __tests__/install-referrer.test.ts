@@ -64,55 +64,61 @@ describe('parseInstallReferrer', () => {
 describe('getInstallReferrerToken', () => {
   const load = () => require('../src/install-referrer').getInstallReferrerToken;
 
-  beforeEach(() => {
-    jest.resetModules();
-    jest.doMock('react-native', () => ({ Platform: { OS: 'android' } }));
-  });
+  const withNative = (impl: unknown) =>
+    jest.doMock('react-native', () => ({
+      Platform: { OS: 'android' },
+      NativeModules: { TolinkuInstallReferrer: impl },
+    }));
+
+  beforeEach(() => jest.resetModules());
   afterEach(() => jest.resetModules());
 
-  it('reads the token from the installed package', async () => {
-    jest.doMock(
-      'react-native-play-install-referrer',
-      () => ({
-        PlayInstallReferrer: {
-          getInstallReferrerInfo: (cb: (i: unknown, e: unknown) => void) =>
-            cb({ installReferrer: 'utm_source=x&tolk_token=FROM_PLAY' }, null),
-        },
-      }),
-      { virtual: true },
-    );
+  it('reads the referrer from our native module', async () => {
+    withNative({
+      getInstallReferrer: async () => 'utm_source=x&tolk_token=FROM_PLAY',
+    });
     await expect(load()()).resolves.toBe('FROM_PLAY');
   });
 
-  it('returns null when Play reports an error', async () => {
-    jest.doMock(
-      'react-native-play-install-referrer',
-      () => ({
-        PlayInstallReferrer: {
-          getInstallReferrerInfo: (cb: (i: unknown, e: unknown) => void) =>
-            cb(null, { message: 'SERVICE_UNAVAILABLE', responseCode: 1 }),
-        },
-      }),
-      { virtual: true },
-    );
+  it('returns null when Play has nothing to report', async () => {
+    withNative({ getInstallReferrer: async () => null });
     await expect(load()()).resolves.toBeNull();
   });
 
-  it('falls back to null when no referrer package is installed', async () => {
+  it('returns null when the native module was not built in, as in Expo Go', async () => {
+    jest.doMock('react-native', () => ({
+      Platform: { OS: 'android' },
+      NativeModules: {},
+    }));
     await expect(load()()).resolves.toBeNull();
+  });
+
+  it('does not touch NativeModules at import time', () => {
+    // Accessing it during module evaluation would crash where it is absent.
+    jest.doMock('react-native', () => ({
+      Platform: { OS: 'android' },
+      get NativeModules(): never {
+        throw new Error('NativeModules read at import time');
+      },
+    }));
+    expect(() => require('../src/install-referrer')).not.toThrow();
   });
 
   it('prefers an explicitly supplied provider', async () => {
+    withNative({ getInstallReferrer: async () => 'tolk_token=NATIVE' });
     await expect(load()(async () => 'tolk_token=EXPLICIT')).resolves.toBe('EXPLICIT');
   });
 
-  it('never throws when the provider does', async () => {
-    await expect(load()(() => { throw new Error('boom'); })).resolves.toBeNull();
+  it('never throws when the native call rejects', async () => {
+    withNative({ getInstallReferrer: async () => { throw new Error('boom'); } });
+    await expect(load()()).resolves.toBeNull();
   });
 
   it('skips the lookup entirely on iOS', async () => {
-    jest.resetModules();
-    jest.doMock('react-native', () => ({ Platform: { OS: 'ios' } }));
+    jest.doMock('react-native', () => ({
+      Platform: { OS: 'ios' },
+      NativeModules: {},
+    }));
     const spy = jest.fn();
     await expect(load()(spy)).resolves.toBeNull();
     expect(spy).not.toHaveBeenCalled();

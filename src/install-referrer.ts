@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 import { debugWarn } from './debug';
 
 /**
@@ -10,11 +10,13 @@ import { debugWarn } from './debug';
  * install and returns it on first launch, naming the exact click rather than
  * inferring it from device signals.
  *
- * Reading it needs a Play Services binding, which is native code. This package
- * stays pure JavaScript on purpose, so the referrer is read through whichever
- * module the app already has: pass one to `claimDeferredLink`, or install a
- * referrer package and it is picked up automatically. Without either, deferred
- * linking still works through signal matching, less precisely.
+ * Reading it needs a Play Services binding, which is native code, and this
+ * package ships that itself: the token is Tolinku's own mechanism, minted on the
+ * link, so reading it back should not depend on a third party. Nothing extra to
+ * install, and autolinking is per-platform so an iOS-only app never builds it.
+ *
+ * Where the native module is absent, notably in Expo Go, deferred linking still
+ * works through signal matching, less precisely.
  */
 
 const TOKEN_KEY = 'tolk_token';
@@ -52,35 +54,17 @@ export function parseInstallReferrer(referrer: string | null | undefined): strin
 export type ReferrerProvider = () => Promise<string | null> | string | null;
 
 /**
- * Modules known to expose the referrer, tried in order when no provider is
- * given. `require` is wrapped because the package is optional by design: a
- * missing module is the ordinary case, not a failure.
+ * Our own native module, when the app was built with it.
+ *
+ * Accessed lazily rather than at import time. In Expo Go, and anywhere the
+ * native side was not built, this is simply absent, and touching NativeModules
+ * during module evaluation would turn that ordinary case into a crash on first
+ * launch.
  */
-function findInstalledProvider(): ReferrerProvider | null {
-  const candidates: Array<() => ReferrerProvider | null> = [
-    () => {
-      // react-native-play-install-referrer
-      const mod = require('react-native-play-install-referrer');
-      const api = mod?.PlayInstallReferrer ?? mod?.default ?? mod;
-      if (typeof api?.getInstallReferrerInfo !== 'function') return null;
-      return () =>
-        new Promise<string | null>(resolve => {
-          api.getInstallReferrerInfo((info: any, err: any) => {
-            resolve(err ? null : info?.installReferrer ?? null);
-          });
-        });
-    },
-  ];
-
-  for (const candidate of candidates) {
-    try {
-      const provider = candidate();
-      if (provider) return provider;
-    } catch {
-      // Not installed. Expected.
-    }
-  }
-  return null;
+function nativeProvider(): ReferrerProvider | null {
+  const native = (NativeModules as Record<string, any> | undefined)?.TolinkuInstallReferrer;
+  if (!native || typeof native.getInstallReferrer !== 'function') return null;
+  return () => native.getInstallReferrer();
 }
 
 /**
@@ -95,7 +79,7 @@ export async function getInstallReferrerToken(
 ): Promise<string | null> {
   if (Platform.OS !== 'android') return null;
 
-  const source = provider ?? findInstalledProvider();
+  const source = provider ?? nativeProvider();
   if (!source) return null;
 
   try {
