@@ -211,7 +211,7 @@ The component automatically filters dismissed and suppressed messages, and shows
 |------|------|-------------|
 | `trigger` | `string?` | Filter messages by trigger type |
 | `triggerValue` | `string?` | Match a specific trigger value |
-| `onButtonPress` | `(action, messageId) => void` | Called when a message button is pressed |
+| `onButtonPress` | `(action, messageId) => void` | Called when a message button is pressed. Only for `http` and `https` actions; anything else is blocked before this runs |
 | `onDismiss` | `(messageId) => void` | Called when a message is dismissed |
 
 ## Configuration Options
@@ -288,7 +288,7 @@ await Tolinku.destroy();
 |------|-------------|
 | `trigger` | Filter messages by trigger type |
 | `triggerValue` | Match a specific trigger value |
-| `onButtonPress` | Callback for button presses |
+| `onButtonPress` | Callback for button presses, for `http` and `https` actions only |
 | `onDismiss` | Callback for message dismissal |
 
 ## Documentation
