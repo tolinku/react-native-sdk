@@ -142,9 +142,26 @@ export class Tolinku {
    * already have your app, so leaving them out makes a re-engagement campaign
    * look like a failure exactly when it worked.
    *
-   * Call it wherever the app receives an incoming link, passing the URL
-   * unchanged. Only http and https links are reported: a custom scheme means
-   * Tolinku's own hand-off page opened the app and that tap is already counted.
+   * Both ways a link arrives need it. The listener fires only while the app is
+   * already running, so a link that launched the app cold arrives separately:
+   *
+   * ```ts
+   * // Launched by a link, app was not running.
+   * const initial = await Linking.getInitialURL();
+   * if (initial) Tolinku.trackLinkOpen(initial);
+   *
+   * // Tapped while the app was already open.
+   * Linking.addEventListener('url', ({ url }) => {
+   *   Tolinku.trackLinkOpen(url);
+   *   // your own routing
+   * });
+   * ```
+   *
+   * Wiring both is safe: the same link arriving twice in quick succession is
+   * reported once.
+   *
+   * Only http and https links are reported. A custom scheme means Tolinku's own
+   * hand-off page opened the app, and that tap is already counted.
    *
    * Never throws.
    */

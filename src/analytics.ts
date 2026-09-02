@@ -1,4 +1,4 @@
-import { AppState, type AppStateStatus, type NativeEventSubscription } from 'react-native';
+import { AppState, Platform, type AppStateStatus, type NativeEventSubscription } from 'react-native';
 import type { HttpClient } from './client';
 import type { TrackProperties } from './types';
 import { validateEventType } from './validation';
@@ -96,7 +96,14 @@ export class Analytics {
     try {
       const result = await this.client.postPublic<{ attribute?: boolean }>(
         '/v1/api/opens',
-        { url: trimmed, ...(userId ? { user_id: userId } : {}) },
+        {
+          url: trimmed,
+          // The User-Agent cannot say which platform this is: this SDK
+          // identifies itself the same way on both. Without it an app open has
+          // no platform and lands in a blank bucket on every breakdown.
+          platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : undefined,
+          ...(userId ? { user_id: userId } : {}),
+        },
       );
       if (result?.attribute === false) this.appOpensDisabled = true;
     } catch {

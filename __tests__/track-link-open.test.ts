@@ -3,6 +3,8 @@ jest.mock('react-native', () => ({
   AppState: {
     addEventListener: jest.fn(() => ({ remove: jest.fn() })),
   },
+  // trackLinkOpen states the platform, because the User-Agent cannot.
+  Platform: { OS: 'ios' },
 }));
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
@@ -135,5 +137,17 @@ describe('trackLinkOpen', () => {
     await a.trackLinkOpen('https://links.example.com/b');
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('states the platform, since the User-Agent cannot', () => {
+    // This SDK identifies itself the same way on iOS and Android, so without
+    // this an app open has no platform and lands in a blank bucket on every
+    // breakdown. The server refuses anything outside a known set.
+    return analytics()
+      .trackLinkOpen('https://links.example.com/x')
+      .then(() => {
+        const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+        expect(body.platform).toBe('ios');
+      });
   });
 });
