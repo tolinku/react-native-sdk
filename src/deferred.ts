@@ -124,13 +124,13 @@ export class Deferred {
   ): Promise<{ link: DeferredLink | null; settled: boolean }> {
     try {
       const { width, height } = Dimensions.get('screen');
-      const resolvedTimezone = options.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const resolvedTimezone = override(options.timezone) || Intl.DateTimeFormat().resolvedOptions().timeZone;
       // Matched against the landing page's `navigator.language`, a full BCP-47 tag
       // such as "ko-KR". Defaulting to a bare "en" meant the language signal
       // almost never scored. Intl reports the device locale with its region on
       // any runtime with Intl support (Hermes has it enabled by default).
       const resolvedLanguage =
-        options.language ||
+        override(options.language) ||
         (typeof Intl !== 'undefined' && typeof Intl.DateTimeFormat === 'function'
           ? Intl.DateTimeFormat().resolvedOptions().locale
           : undefined) ||
@@ -140,11 +140,11 @@ export class Deferred {
         appspace_id: options.appspaceId,
         timezone: resolvedTimezone,
         language: resolvedLanguage,
-        screen_width: options.screenWidth || width,
-        screen_height: options.screenHeight || height,
+        screen_width: override(options.screenWidth) || width,
+        screen_height: override(options.screenHeight) || height,
         // Separates devices reporting identical dp dimensions.
-        device_pixel_ratio: options.devicePixelRatio || PixelRatio.get(),
-        os_version: options.osVersion || String(Platform.Version),
+        device_pixel_ratio: override(options.devicePixelRatio) || PixelRatio.get(),
+        os_version: override(options.osVersion) || String(Platform.Version),
       });
       return { link, settled: true };
     } catch (err) {
@@ -172,4 +172,27 @@ export class Deferred {
       return { link: null, settled: false };
     }
   }
+}
+
+/**
+ * An override the caller actually supplied.
+ *
+ * A blank string and a non-positive number are what an unset configuration value
+ * and a failed lookup look like. Taking one literally would replace a good value
+ * the device reported with one the matcher cannot use, and a signal that is
+ * present and disagrees counts against the match where an absent one is simply
+ * skipped. So a blank override is worse than no override, which is the opposite
+ * of what the caller intends by passing it.
+ */
+function override(value: string | undefined): string | undefined;
+function override(value: number | undefined): number | undefined;
+function override(value: string | number | undefined): string | number | undefined {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed === '' ? undefined : trimmed;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value > 0 ? value : undefined;
+  }
+  return undefined;
 }
