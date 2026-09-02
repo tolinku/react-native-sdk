@@ -1,5 +1,5 @@
 /** SDK version */
-export const SDK_VERSION = '0.4.1';
+export const SDK_VERSION = '0.5.0';
 
 /** Configuration options for the Tolinku SDK */
 export interface TolinkuConfig {
