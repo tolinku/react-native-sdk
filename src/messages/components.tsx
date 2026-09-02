@@ -89,19 +89,25 @@ export function PuckComponentRenderer({ component, messageId, options }: Compone
     }
 
     case 'Button': {
-      const handlePress = () => {
-        const action = (props.action as string) || '';
-        if (options.onButtonPress) {
-          options.onButtonPress(action, messageId);
-        } else if (action) {
-          // Validate URL safety before opening
+        const handlePress = () => {
+          const action = (props.action as string) || '';
+          if (!action) return;
+
+          // Checked before either path, including the caller's own handler. The
+          // URL comes from message content, and a handler is ordinary app code
+          // that will reasonably pass it to Linking.openURL without looking. The
+          // Android and Flutter SDKs validate in the same place.
           if (!isSafeUrl(action)) {
             debugWarn(`Button action URL blocked (unsafe protocol): ${action}`);
             return;
           }
-          Linking.openURL(action).catch(() => {});
-        }
-      };
+
+          if (options.onButtonPress) {
+            options.onButtonPress(action, messageId);
+          } else {
+            Linking.openURL(action).catch(() => {});
+          }
+        };
 
       const containerStyle: ViewStyle = {
         backgroundColor: (props.bgColor as string) || '#1B1B1B',

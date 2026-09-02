@@ -1,3 +1,21 @@
+## 0.4.1
+
+### Fixed
+
+- An in-app message button now has its URL checked before `onButtonPress` is
+  called, not only before the SDK opens the URL itself. The URL comes from
+  message content, and a handler is ordinary app code that will reasonably pass
+  it to `Linking.openURL` without looking, so the check belonged before both
+  paths. The Android and Flutter SDKs validate in the same place. Only `http`
+  and `https` are passed on; anything else is blocked and logged in debug mode.
+
+  If you relied on receiving a custom scheme such as `myapp://` through
+  `onButtonPress`, it no longer arrives. Say so and we will add a way to allow
+  your own scheme rather than leaving every scheme open.
+
+- `isSafeUrl`, `validateBaseUrl` and `validateEventType` now have tests. They had
+  none, despite guarding every image, background and button URL in a message.
+
 # Changelog
 
 ## 0.4.0

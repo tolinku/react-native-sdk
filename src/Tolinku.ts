@@ -135,6 +135,27 @@ export class Tolinku {
   }
 
   /**
+   * Report that a link opened the app, when it opened without the browser.
+   *
+   * A Universal Link or App Link hands the app the URL directly, so Tolinku is
+   * never contacted and the tap goes unrecorded. Those taps come from people who
+   * already have your app, so leaving them out makes a re-engagement campaign
+   * look like a failure exactly when it worked.
+   *
+   * Call it wherever the app receives an incoming link, passing the URL
+   * unchanged. Only http and https links are reported: a custom scheme means
+   * Tolinku's own hand-off page opened the app and that tap is already counted.
+   *
+   * Never throws.
+   */
+  static async trackLinkOpen(url: string): Promise<void> {
+    // Unlike track, a missing instance is not worth throwing over: this sits on
+    // the path that routes the user somewhere.
+    if (!Tolinku.analyticsInstance) return;
+    return Tolinku.analyticsInstance.trackLinkOpen(url, Tolinku._userId ?? undefined);
+  }
+
+  /**
    * Immediately flush all queued analytics and ecommerce events to the server.
    */
   static async flush(): Promise<void> {

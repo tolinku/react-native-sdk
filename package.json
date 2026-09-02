@@ -1,6 +1,6 @@
 {
   "name": "@tolinku/react-native-sdk",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Tolinku React Native SDK for deep linking, analytics, referrals, and in-app messages",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
