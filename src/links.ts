@@ -24,6 +24,21 @@ import { debugWarn } from './debug';
  * A readable URL comes back unchanged, so an app can simply resolve everything
  * rather than guessing which kind it has.
  */
+/**
+ * Whether the platform's answer is the path it promises to be.
+ *
+ * `resolve` sends its question to a host taken from the URL it was given, so an
+ * app resolving a link from somewhere it does not control is talking to a
+ * stranger. The contract is a path and nothing else: a full URL, or a protocol
+ * relative "//host" that reads as one, is a redirect waiting to happen in
+ * whatever the app does with it next.
+ */
+function isRoutablePath(path: unknown): path is string {
+  return typeof path === 'string'
+    && path.startsWith('/')
+    && !path.startsWith('//');
+}
+
 export class Links {
   constructor(private client: HttpClient) {}
 
@@ -60,7 +75,8 @@ export class Links {
         '/v1/api/path',
         { path: parsed.pathname },
       );
-      return result && result.route ? result : null;
+      if (!result || !result.route || !isRoutablePath(result.deep_link_path)) return null;
+      return result;
     } catch (err) {
       debugWarn(`Links.resolve failed: ${(err as Error).message}`);
       return null;

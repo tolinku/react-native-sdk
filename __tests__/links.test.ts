@@ -70,6 +70,21 @@ describe('what it declines to ask about', () => {
   });
 });
 
+describe('an answer that is not a path', () => {
+  // resolve sends its question to a host taken from the URL it was given, so an
+  // app resolving a link from somewhere it does not control is talking to a
+  // stranger. Anything but a path is a redirect waiting to happen.
+  it.each([
+    ['a full URL', 'https://evil.example.com/take-over'],
+    ['a protocol relative URL', '//evil.example.com/take-over'],
+    ['a bare word', 'order/4821'],
+    ['nothing', ''],
+  ])('refuses %s', async (_label, deep_link_path) => {
+    const { client } = mockClient(jest.fn().mockResolvedValue({ ...answer, deep_link_path }));
+    expect(await new Links(client).resolve('https://links.example.com/s7k2p9q/4821')).toBeNull();
+  });
+});
+
 describe('when the answer does not come', () => {
   it('returns null rather than throwing into a cold start', async () => {
     // This runs while the app is opening. An exception here is the difference
