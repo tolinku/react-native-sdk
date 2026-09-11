@@ -6,11 +6,11 @@ import { debugWarn } from './debug';
  * Working out what a link the operating system handed the app actually means.
  *
  * An app receives the URL that was tapped, exactly as it was written. That is
- * fine while the URL is readable: `/order/1007100` says "order" and the app can
+ * fine while the URL is readable: `/order/4821` says "order" and the app can
  * route it. It is not fine for a short link, which is the same route written as
  * a code:
  *
- *   https://links.example.com/imbwmum/1007100
+ *   https://links.example.com/s7k2p9q/4821
  *
  * Nothing in that URL says "order", and nothing about the code can be worked
  * out on the device. An app parsing the path itself sees a first segment it has

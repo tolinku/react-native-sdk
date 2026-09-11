@@ -133,7 +133,7 @@ The SDK supports 13 event types covering the full shopping journey. Cart IDs are
 
 ### Resolving a Link
 
-Short links open your app but arrive as an opaque code, `/imbwmum/1007100`.
+Short links open your app but arrive as an opaque code, `/s7k2p9q/4821`.
 Nothing in that URL says which route it is, and nothing on the device can work
 it out, so an app parsing the path itself does nothing and the link appears to
 fail with no error and no screen.
@@ -148,8 +148,8 @@ import { Tolinku } from '@tolinku/react-native-sdk';
 
 const link = await Tolinku.links.resolve(url);
 if (link) {
-  // link.deep_link_path -> "/order/1007100/receipt"
-  // link.token          -> "1007100"
+  // link.deep_link_path -> "/order/4821/receipt"
+  // link.token          -> "4821"
   // link.route.prefix   -> "order/{token}/receipt"
   route(link.deep_link_path);
 }
