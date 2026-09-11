@@ -54,6 +54,21 @@ describe('resolving a short link', () => {
   });
 });
 
+describe('what leaves the device', () => {
+  it('asks without the API key, since the host is not necessarily ours', async () => {
+    // The origin comes from the URL this was handed. An app resolving a link
+    // from somewhere it does not control would otherwise post the Appspace's
+    // key to a stranger.
+    const { client, post } = mockClient();
+    await new Links(client).resolve('https://links.example.com/s7k2p9q/4821');
+
+    // postPublicToOrigin is the unauthenticated door; post() is the one that
+    // carries the key, and it must not be the one used here.
+    expect(post).toHaveBeenCalled();
+    expect((client as unknown as Record<string, unknown>).post).toBeUndefined();
+  });
+});
+
 describe('what it declines to ask about', () => {
   it('says nothing for a custom scheme link', async () => {
     // That one already carries the path the app wants.
