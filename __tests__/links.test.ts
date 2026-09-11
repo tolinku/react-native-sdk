@@ -19,7 +19,6 @@ const answer: ResolvedLink = {
   route: { prefix: 'order/{token}/receipt', name: 'Order Receipt', template: 'none', link_type: 'dynamic' },
   token: '1007100',
   deep_link_path: '/order/1007100/receipt',
-  appspace: { name: 'Tasonic', slug: 'tasonic' },
 };
 
 function mockClient(impl?: jest.Mock): { client: HttpClient; post: jest.Mock } {

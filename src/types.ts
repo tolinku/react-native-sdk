@@ -114,8 +114,15 @@ export interface DeferredLink {
   referral_code?: string;
 }
 
-/** What a Tolinku link turned out to mean. */
+/**
+ * What a Tolinku link turned out to mean.
+ *
+ * The same shape in every SDK, so an app moving between them reads one thing.
+ * The Appspace the link belongs to is deliberately not here: the app already
+ * knows which Appspace it is, and nothing about routing a link needs it.
+ */
 export interface ResolvedLink {
+  /** The route that answers this link. */
   route: {
     prefix: string;
     name: string;
@@ -126,7 +133,6 @@ export interface ResolvedLink {
   token: string;
   /** The canonical path, with the token wherever the route's prefix puts it. */
   deep_link_path: string;
-  appspace: { name: string; slug: string };
 }
 
 /** Options for claiming deferred link by signals */

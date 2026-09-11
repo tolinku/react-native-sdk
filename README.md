@@ -131,6 +131,30 @@ await Tolinku.ecommerce.flush();
 
 The SDK supports 13 event types covering the full shopping journey. Cart IDs are managed automatically via `AsyncStorage` and cleared after purchase. Events auto-flush when the app enters the background.
 
+### Resolving a Link
+
+Short links open your app but arrive as an opaque code, `/imbwmum/1007100`.
+Nothing in that URL says which route it is, and nothing on the device can work
+it out, so an app parsing the path itself does nothing and the link appears to
+fail with no error and no screen.
+
+`resolve` asks Tolinku, which answers with the route, the token and the
+canonical path. A readable URL comes back unchanged, so you can resolve
+everything rather than guessing which kind you have. It never throws: a link it
+cannot resolve is one to fall back to your own handling for.
+
+```js
+import { Tolinku } from '@tolinku/react-native-sdk';
+
+const link = await Tolinku.links.resolve(url);
+if (link) {
+  // link.deep_link_path -> "/order/1007100/receipt"
+  // link.token          -> "1007100"
+  // link.route.prefix   -> "order/{token}/receipt"
+  route(link.deep_link_path);
+}
+```
+
 ### Deferred Deep Links
 
 Recover deep link context for users who installed your app after clicking a link. Deferred deep linking lets you route users to specific content even when the app was not installed at the time of the click.
