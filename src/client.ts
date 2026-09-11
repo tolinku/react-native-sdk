@@ -62,6 +62,26 @@ export class HttpClient {
     });
   }
 
+  /**
+   * POST to a host other than the configured one, without the API key.
+   *
+   * A few public endpoints work out which Appspace they belong to from the
+   * hostname the request arrived on rather than from a key or an id, so a
+   * question about a link on a customer's own domain has to be asked on that
+   * domain. Everything else about the request is unchanged: same timeout, same
+   * retries, same headers.
+   */
+  async postPublicToOrigin<T>(origin: string, path: string, body?: Record<string, unknown>): Promise<T> {
+    return this.executeWithRetry<T>(origin.replace(/\/+$/, '') + path, {
+      method: 'POST',
+      headers: {
+        ...this.publicHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }
+
   /** POST without API key auth (for public endpoints like deferred claim) */
   async postPublic<T>(path: string, body?: Record<string, unknown>): Promise<T> {
     return this.executeWithRetry<T>(this.baseUrl + path, {

@@ -30,6 +30,7 @@ export type {
   ReferralInfo,
   LeaderboardEntry,
   DeferredLink,
+  ResolvedLink,
   ClaimBySignalsOptions,
   Message,
   MessageContent,

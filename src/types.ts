@@ -114,6 +114,21 @@ export interface DeferredLink {
   referral_code?: string;
 }
 
+/** What a Tolinku link turned out to mean. */
+export interface ResolvedLink {
+  route: {
+    prefix: string;
+    name: string;
+    template: string;
+    link_type?: string;
+  };
+  /** The token the link carried, or '' where it carried none. */
+  token: string;
+  /** The canonical path, with the token wherever the route's prefix puts it. */
+  deep_link_path: string;
+  appspace: { name: string; slug: string };
+}
+
 /** Options for claiming deferred link by signals */
 export interface ClaimBySignalsOptions {
   appspaceId: string;

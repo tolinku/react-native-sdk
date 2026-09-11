@@ -3,6 +3,7 @@ import { Analytics } from './analytics';
 import { Ecommerce } from './ecommerce';
 import { Referrals } from './referrals';
 import { Deferred } from './deferred';
+import { Links } from './links';
 import { validateBaseUrl } from './validation';
 import { setDebugEnabled, debugLog, debugWarn } from './debug';
 import { setStorageNamespace, resetStorageNamespace } from './storage';
@@ -26,6 +27,7 @@ export class Tolinku {
   private static ecommerceInstance: Ecommerce | null = null;
   private static referralsInstance: Referrals | null = null;
   private static deferredInstance: Deferred | null = null;
+  private static linksInstance: Links | null = null;
   private static _initialized = false;
   private static _userId: string | null = null;
 
@@ -88,6 +90,7 @@ export class Tolinku {
     Tolinku.ecommerceInstance = new Ecommerce(Tolinku.client, () => Tolinku._userId);
     Tolinku.referralsInstance = new Referrals(Tolinku.client);
     Tolinku.deferredInstance = new Deferred(Tolinku.client);
+    Tolinku.linksInstance = new Links(Tolinku.client);
     Tolinku._initialized = true;
 
     debugLog(`Tolinku SDK v${SDK_VERSION} initialized (baseUrl=${baseUrl})`);
@@ -210,6 +213,19 @@ export class Tolinku {
   }
 
   /**
+   * Turning a link the app was handed into the route and token it means.
+   *
+   * Needed for short links, which arrive as an opaque code that nothing on the
+   * device can interpret. See {@link Links.resolve}.
+   */
+  static get links(): Links {
+    if (!Tolinku.linksInstance) {
+      throw new Error('Tolinku: SDK not initialized. Call Tolinku.init() first.');
+    }
+    return Tolinku.linksInstance;
+  }
+
+  /**
    * Shut down the SDK and release resources.
    * Flushes remaining analytics events, cancels timers, removes listeners,
    * and aborts in-flight requests. After calling this, you must call init()
@@ -240,6 +256,7 @@ export class Tolinku {
     Tolinku.ecommerceInstance = null;
     Tolinku.referralsInstance = null;
     Tolinku.deferredInstance = null;
+    Tolinku.linksInstance = null;
     Tolinku._initialized = false;
     Tolinku._userId = null;
 
