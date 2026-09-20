@@ -71,6 +71,41 @@ export function num(raw: unknown, fallback: number): number {
   return fallback;
 }
 
+/** One of the alignments the builder offers, never whatever content carried. */
+function alignment(raw: unknown): TextStyle['textAlign'] {
+  return raw === 'center' || raw === 'right' || raw === 'justify' ? raw : 'left';
+}
+
+/**
+ * The colour names React Native knows, which it matches case sensitively.
+ *
+ * The builder's colour fields are free text in a browser, where names are
+ * case insensitive and the set is larger, so this is where the two disagree.
+ */
+const NAMED_COLORS = new Set([
+  'transparent', 'aliceblue', 'antiquewhite', 'aqua', 'aquamarine', 'azure', 'beige', 'bisque',
+  'black', 'blanchedalmond', 'blue', 'blueviolet', 'brown', 'burlywood', 'cadetblue', 'chartreuse',
+  'chocolate', 'coral', 'cornflowerblue', 'cornsilk', 'crimson', 'cyan', 'darkblue', 'darkcyan',
+  'darkgoldenrod', 'darkgray', 'darkgreen', 'darkgrey', 'darkkhaki', 'darkmagenta', 'darkolivegreen',
+  'darkorange', 'darkorchid', 'darkred', 'darksalmon', 'darkseagreen', 'darkslateblue',
+  'darkslategray', 'darkslategrey', 'darkturquoise', 'darkviolet', 'deeppink', 'deepskyblue',
+  'dimgray', 'dimgrey', 'dodgerblue', 'firebrick', 'floralwhite', 'forestgreen', 'fuchsia',
+  'gainsboro', 'ghostwhite', 'gold', 'goldenrod', 'gray', 'green', 'greenyellow', 'grey',
+  'honeydew', 'hotpink', 'indianred', 'indigo', 'ivory', 'khaki', 'lavender', 'lavenderblush',
+  'lawngreen', 'lemonchiffon', 'lightblue', 'lightcoral', 'lightcyan', 'lightgoldenrodyellow',
+  'lightgray', 'lightgreen', 'lightgrey', 'lightpink', 'lightsalmon', 'lightseagreen',
+  'lightskyblue', 'lightslategray', 'lightslategrey', 'lightsteelblue', 'lightyellow', 'lime',
+  'limegreen', 'linen', 'magenta', 'maroon', 'mediumaquamarine', 'mediumblue', 'mediumorchid',
+  'mediumpurple', 'mediumseagreen', 'mediumslateblue', 'mediumspringgreen', 'mediumturquoise',
+  'mediumvioletred', 'midnightblue', 'mintcream', 'mistyrose', 'moccasin', 'navajowhite', 'navy',
+  'oldlace', 'olive', 'olivedrab', 'orange', 'orangered', 'orchid', 'palegoldenrod', 'palegreen',
+  'paleturquoise', 'palevioletred', 'papayawhip', 'peachpuff', 'peru', 'pink', 'plum', 'powderblue',
+  'purple', 'rebeccapurple', 'red', 'rosybrown', 'royalblue', 'saddlebrown', 'salmon', 'sandybrown',
+  'seagreen', 'seashell', 'sienna', 'silver', 'skyblue', 'slateblue', 'slategray', 'slategrey',
+  'snow', 'springgreen', 'steelblue', 'tan', 'teal', 'thistle', 'tomato', 'turquoise', 'violet',
+  'wheat', 'white', 'whitesmoke', 'yellow', 'yellowgreen',
+]);
+
 /**
  * A colour React Native can actually parse, or the fallback.
  *
@@ -86,18 +121,29 @@ export function color(raw: unknown, fallback: string): string {
   if (!value) return fallback;
 
   if (/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value)) return value;
-  // The comma forms only. The CSS space syntax, rgb(0 0 0 / 50%), is not
-  // understood by React Native.
-  if (/^(?:rgb|rgba|hsl|hsla)\(\s*[\d.]+\s*,[^)]*\)$/i.test(value)) return value;
-  if (/^[a-z]+$/i.test(value)) return value; // named colours, including transparent
+  // The comma forms only, and no percentage alpha: React Native understands
+  // neither the CSS space syntax, rgb(0 0 0 / 50%), nor rgba(0,0,0,50%).
+  if (/^(?:rgb|rgba|hsl|hsla)\(\s*[\d.]+\s*,[^)%]*\)$/i.test(value)) return value;
+  // Named colours, matched against the set React Native actually knows and
+  // lowercased first. Its table is case sensitive, so an author who types
+  // "Red", sees it in the browser preview and passes a case-insensitive check
+  // gets nothing on the device: the exact silent failure this guards against.
+  if (NAMED_COLORS.has(value.toLowerCase())) return value.toLowerCase();
 
   debugWarn(`Colour "${raw}" is not one React Native can read; using ${fallback}.`);
   return fallback;
 }
 
-/** The "soft" button variant's tint, matching the builder and the web. */
-function softVariant(hex: string): string {
-  return /^#[0-9a-f]{6}$/i.test(hex) ? `${hex}22` : hex;
+/**
+ * The "soft" button variant's tint.
+ *
+ * Only a hex colour can be tinted by appending an alpha, and a soft button
+ * draws its label in the untinted colour. So when the tint cannot be applied,
+ * the label and the background are the same colour and the button reads as an
+ * empty block. Anything else falls back to filled, which is readable.
+ */
+function softVariant(hex: string): string | null {
+  return /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(hex) ? `${hex}22` : null;
 }
 
 /**
@@ -247,6 +293,9 @@ function StoreBadge({
 }): React.ReactElement {
   const usable = !!uri && isSafeUrl(uri);
   const ratio = useImageRatio(usable ? uri! : '', usable);
+  // A badge is artwork, not a layout choice: a height of zero is not a smaller
+  // badge, it is no badge, so the authored value is floored rather than obeyed.
+  const usableHeight = height > 0 ? height : 44;
 
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.7} accessibilityRole="button">
@@ -255,7 +304,7 @@ function StoreBadge({
           source={{ uri: uri! }}
           // Until measured, a badge-shaped box. Both stores' artwork is within
           // a percent of this, so the correction on arrival is imperceptible.
-          style={{ height, width: height * (ratio || 3.47), marginHorizontal: 6 }}
+          style={{ height: usableHeight, width: usableHeight * (ratio || 3.47), marginHorizontal: 6 }}
           resizeMode="contain"
           accessibilityLabel={label}
         />
@@ -290,9 +339,37 @@ const SUPPORTED = new Set([
  * an empty card with a close button. Asking first lets the message fall back
  * to its title and body instead.
  */
-export function drawsAnything(content: MessageComponent[] | undefined): boolean {
-  return (content || []).some(c => SUPPORTED.has(c?.type));
+export function drawsAnything(
+  content: MessageComponent[] | undefined,
+  app?: MessageAppContext | null,
+): boolean {
+  return (content || []).some(c => {
+    if (!c || !SUPPORTED.has(c.type)) return false;
+    const props = (c.props || {}) as Record<string, unknown>;
+    // A few components draw only when something outside the content exists.
+    // Counting them regardless is how an empty card came back.
+    if (c.type === 'Image') return isSafeUrl((props.url as string) || '');
+    if (c.type === 'DeepLinkButton') return !!app?.deep_link_url;
+    if (c.type === 'StoreButtons') {
+      const ios = props.showIos !== false && ((props.iosUrlOverride as string) || app?.ios_store_url);
+      const android = props.showAndroid !== false && ((props.androidUrlOverride as string) || app?.android_store_url);
+      return !!(ios || android);
+    }
+    return true;
+  });
 }
+
+/**
+ * How deep a section may nest before the renderer stops following zones.
+ *
+ * A zone can name a section that contains itself, directly or through another.
+ * React's work loop is iterative, so that is not a stack overflow: it is an
+ * app that allocates until it is killed, with no error and nothing on screen.
+ * Content saved before any of this was validated can be shaped that way, so
+ * the renderer refuses to follow it forever rather than trusting what it is
+ * handed.
+ */
+const MAX_SECTION_DEPTH = 20;
 
 export interface RenderOptions extends ShowMessageOptions {
   /** Section children, keyed "<component id>:content", as Puck stores them. */
@@ -301,6 +378,8 @@ export interface RenderOptions extends ShowMessageOptions {
   app?: MessageAppContext | null;
   /** Dismiss the message. A button action of "close" calls this. */
   onRequestClose?: () => void;
+  /** How many sections deep this render already is. Internal. */
+  depth?: number;
 }
 
 interface ComponentRendererProps {
@@ -310,7 +389,11 @@ interface ComponentRendererProps {
 }
 
 export function PuckComponentRenderer({ component, messageId, options }: ComponentRendererProps): React.ReactElement | null {
-  const { props } = component;
+  // Content is a network response, not something this package produced, so a
+  // malformed entry is skipped rather than allowed to throw mid-render. There
+  // is no error boundary in a host app: a throw here is a blank screen.
+  if (!component || typeof component !== 'object' || typeof component.type !== 'string') return null;
+  const props = component.props && typeof component.props === 'object' ? component.props : {};
   const app = options.app;
 
   /** Open a URL the way the host app asked us to, or the way the OS would. */
@@ -326,7 +409,7 @@ export function PuckComponentRenderer({ component, messageId, options }: Compone
         fontSize,
         fontWeight: '700',
         color: color(props.color, '#1B1B1B'),
-        textAlign: (props.alignment as TextStyle['textAlign']) || 'left',
+        textAlign: alignment(props.alignment),
         lineHeight: fontSize * 1.2,
         marginBottom: 8,
       };
@@ -338,7 +421,7 @@ export function PuckComponentRenderer({ component, messageId, options }: Compone
       const style: TextStyle = {
         fontSize,
         color: color(props.color, '#555555'),
-        textAlign: (props.alignment as TextStyle['textAlign']) || 'left',
+        textAlign: alignment(props.alignment),
         lineHeight: fontSize * 1.5,
         marginBottom: 8,
       };
@@ -408,9 +491,10 @@ export function PuckComponentRenderer({ component, messageId, options }: Compone
 
       const variant = (props.style as string) || 'filled';
       const isOutline = variant === 'outline';
-      const isSoft = variant === 'soft';
+      const tint = variant === 'soft' ? softVariant(color(props.bgColor, '#1B1B1B')) : null;
+      const isSoft = tint !== null;
       const baseColor = color(props.bgColor, '#1B1B1B');
-      const background = isOutline ? 'transparent' : isSoft ? softVariant(baseColor) : baseColor;
+      const background = isOutline ? 'transparent' : isSoft ? tint! : baseColor;
       const labelColor = isOutline || isSoft ? baseColor : color(props.textColor, '#ffffff');
 
       const containerStyle: ViewStyle = {
@@ -447,8 +531,12 @@ export function PuckComponentRenderer({ component, messageId, options }: Compone
       // the top level of the content, never in props.children. Reading
       // props.children rendered every Section as an empty box and lost
       // everything an author put inside it.
-      const zoneKey = `${(props.id as string) || ''}:content`;
-      const children = options.zones?.[zoneKey] || [];
+      // An id-less section would read the literal key "undefined:content" and
+      // share its children with every other id-less section in the message.
+      const sectionId = typeof props.id === 'string' && props.id ? props.id : null;
+      const depth = options.depth || 0;
+      const children =
+        sectionId && depth < MAX_SECTION_DEPTH ? options.zones?.[`${sectionId}:content`] || [] : [];
 
       const containerStyle: ViewStyle = {
         backgroundColor: typeof props.bgColor === 'string' && props.bgColor
@@ -461,10 +549,10 @@ export function PuckComponentRenderer({ component, messageId, options }: Compone
 
       const content = children.map((child, index) => (
         <PuckComponentRenderer
-          key={`${messageId}-section-${index}-${child.type}`}
+          key={`${messageId}-section-${index}-${child?.type}`}
           component={child}
           messageId={messageId}
-          options={options}
+          options={{ ...options, depth: depth + 1 }}
         />
       ));
 

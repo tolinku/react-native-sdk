@@ -1,6 +1,7 @@
 import type { HttpClient } from './client';
 import type { ResolvedLink } from './types';
 import { debugWarn } from './debug';
+import { parseHttpUrl } from './validation';
 
 /**
  * Working out what a link the operating system handed the app actually means.
@@ -57,17 +58,18 @@ export class Links {
   async resolve(url: string): Promise<ResolvedLink | null> {
     if (!url || typeof url !== 'string') return null;
 
-    let parsed: URL;
-    try {
-      parsed = new URL(url.trim());
-    } catch {
-      debugWarn(`Links.resolve: not a URL: ${url}`);
-      return null;
-    }
-
+    // Parsed here rather than with the platform's URL: React Native's own URL
+    // throws from origin and protocol on most of the versions this package
+    // supports, and the throw landed inside the catch below, so a perfectly
+    // good link came back as "not a URL" on device while every test passed.
+    //
     // http and https only. A custom scheme link already carries the path the
     // app wants, and anything else is not a link this could answer for.
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+    const parsed = parseHttpUrl(url);
+    if (!parsed) {
+      debugWarn(`Links.resolve: not an http(s) URL: ${url}`);
+      return null;
+    }
 
     try {
       const result = await this.client.postPublicToOrigin<ResolvedLink>(

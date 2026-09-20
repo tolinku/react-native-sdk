@@ -256,7 +256,19 @@ describe('a component this renderer does not know', () => {
 describe('whether a message would draw anything at all', () => {
   it('knows the components it can draw', () => {
     expect(drawsAnything([comp('Heading', { text: 'Hi' })])).toBe(true);
-    expect(drawsAnything([comp('StoreButtons'), comp('ProfileHeader')])).toBe(true);
+    expect(drawsAnything([comp('Image', { url: 'https://cdn.example.com/a.jpg' })])).toBe(true);
+    expect(drawsAnything([comp('StoreButtons'), comp('ProfileHeader')], app)).toBe(true);
+  });
+
+  it('does not count a component that would draw nothing anyway', () => {
+    // Knowing only the type is how an empty card came back: store buttons with
+    // no store configured, a deep link button with no link, an image with no
+    // usable URL. Each renders null, so a message of only these has nothing.
+    const noStores = { ...app, ios_store_url: null, android_store_url: null };
+    expect(drawsAnything([comp('StoreButtons')], noStores)).toBe(false);
+    expect(drawsAnything([comp('DeepLinkButton')], { ...app, deep_link_url: null })).toBe(false);
+    expect(drawsAnything([comp('Image', { url: '' })], app)).toBe(false);
+    expect(drawsAnything([comp('Image', { url: 'javascript:alert(1)' })], app)).toBe(false);
   });
 
   it('knows when nothing would draw, so the message can fall back', () => {

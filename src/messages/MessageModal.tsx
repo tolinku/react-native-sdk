@@ -32,7 +32,12 @@ interface MessageModalProps {
 function gradientStartColor(gradient: unknown): string | null {
   if (typeof gradient !== 'string' || !gradient) return null;
   const match = /#[0-9a-f]{3,8}|rgba?\([^)]*\)/i.exec(gradient);
-  return match ? match[0] : null;
+  if (!match) return null;
+  // Checked like any other colour: the pattern above will happily match a
+  // five digit hex or the space syntax, both of which React Native drops,
+  // leaving a card with no background at all.
+  const validated = color(match[0], '');
+  return validated || null;
 }
 
 export function MessageModal({ message, visible, onClose, options, app }: MessageModalProps): React.ReactElement {
@@ -51,18 +56,23 @@ export function MessageModal({ message, visible, onClose, options, app }: Messag
   // Root background: what the author set on the message surface, then the
   // message's own colour field, then white. All of it was ignored before, so a
   // message designed on a gradient arrived as a plain white card.
+  // The gradient wins over the colour, which is what CSS does for the same
+  // pair and therefore what the preview and the WebView show. It matters
+  // because the builder writes bgColor: '#ffffff' into every saved root, so
+  // reading the colour first meant a gradient message was always white here.
   const background =
-    (typeof rootProps.bgColor === 'string' && rootProps.bgColor
-      ? color(rootProps.bgColor, '')
-      : '') ||
     gradientStartColor(rootProps.bgGradient) ||
+    (typeof rootProps.bgColor === 'string' && rootProps.bgColor ? color(rootProps.bgColor, '') : '') ||
     message.background_color ||
     '#ffffff';
 
   const cardStyle = {
     backgroundColor: background,
-    padding: num(rootProps.padding, 24),
-    maxWidth: num(rootProps.contentWidth, 375),
+    padding: Math.max(0, num(rootProps.padding, 20)),
+    // Clamped, unlike the other authored numbers. A padding of zero is a
+    // choice; a width of zero is the whole message gone, and the field's own
+    // minimum is zero. The bounds and the default match the server renderer.
+    maxWidth: Math.min(2000, Math.max(100, num(rootProps.contentWidth, 480))),
   };
 
   const content = message.content?.content || [];
@@ -71,7 +81,7 @@ export function MessageModal({ message, visible, onClose, options, app }: Messag
   // builder at all, and one saved before the palette was narrowed may be made
   // entirely of components this renderer skips. Either way the card used to
   // come up empty but for its close button.
-  const hasDesignedContent = drawsAnything(content);
+  const hasDesignedContent = drawsAnything(content, app);
 
   return (
     <Modal

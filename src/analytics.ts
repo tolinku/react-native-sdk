@@ -1,7 +1,7 @@
 import { AppState, Platform, type AppStateStatus, type NativeEventSubscription } from 'react-native';
 import type { HttpClient } from './client';
 import type { TrackProperties } from './types';
-import { validateEventType } from './validation';
+import { validateEventType, isSafeUrl } from './validation';
 import { debugLog, debugWarn } from './debug';
 
 /** Number of events that triggers an automatic flush. */
@@ -80,13 +80,11 @@ export class Analytics {
     if (!trimmed) return;
 
     // The scheme decides, and the server checks it again.
-    let parsed: URL;
-    try {
-      parsed = new URL(trimmed);
-    } catch {
-      return;
-    }
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
+    // Not the platform's URL: React Native's own throws from protocol on most
+    // of the versions this package supports, and that throw was uncaught here,
+    // so an open reported from a link turned into an unhandled rejection in
+    // apps that call this without awaiting it, which is how it is documented.
+    if (!isSafeUrl(trimmed)) return;
 
     const now = Date.now();
     if (this.lastOpenUrl === trimmed && now - this.lastOpenAt < Analytics.OPEN_DEDUPE_MS) return;
