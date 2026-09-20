@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import type { Message, MessageAppContext, ShowMessageOptions } from '../types';
 import { saveMessageDismissal } from '../storage';
-import { PuckComponentRenderer, color, num } from './components';
+import { PuckComponentRenderer, color, num, drawsAnything } from './components';
 
 interface MessageModalProps {
   message: Message | null;
@@ -68,8 +68,10 @@ export function MessageModal({ message, visible, onClose, options, app }: Messag
   const content = message.content?.content || [];
 
   // A message may carry only a title and a body, with nothing designed in the
-  // builder at all. That used to render as an empty card with a close button.
-  const hasDesignedContent = content.length > 0;
+  // builder at all, and one saved before the palette was narrowed may be made
+  // entirely of components this renderer skips. Either way the card used to
+  // come up empty but for its close button.
+  const hasDesignedContent = drawsAnything(content);
 
   return (
     <Modal

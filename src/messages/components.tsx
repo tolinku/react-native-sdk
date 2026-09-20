@@ -268,6 +268,32 @@ function StoreBadge({
   );
 }
 
+/** The component types this renderer draws. */
+const SUPPORTED = new Set([
+  'Heading',
+  'TextBlock',
+  'Image',
+  'Button',
+  'DeepLinkButton',
+  'Section',
+  'Spacer',
+  'Divider',
+  'AppIcon',
+  'StoreButtons',
+]);
+
+/**
+ * Whether anything in this content would actually draw.
+ *
+ * A message saved before the builder's palette was narrowed can be made
+ * entirely of components this renderer skips, and skipping all of them leaves
+ * an empty card with a close button. Asking first lets the message fall back
+ * to its title and body instead.
+ */
+export function drawsAnything(content: MessageComponent[] | undefined): boolean {
+  return (content || []).some(c => SUPPORTED.has(c?.type));
+}
+
 export interface RenderOptions extends ShowMessageOptions {
   /** Section children, keyed "<component id>:content", as Puck stores them. */
   zones?: Record<string, MessageComponent[]>;

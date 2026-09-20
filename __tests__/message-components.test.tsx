@@ -15,7 +15,7 @@ jest.mock('react-native', () => ({
 }));
 
 import React from 'react';
-import { PuckComponentRenderer, type RenderOptions } from '../src/messages/components';
+import { PuckComponentRenderer, drawsAnything, type RenderOptions } from '../src/messages/components';
 import type { MessageComponent } from '../src/types';
 
 const app = {
@@ -250,5 +250,23 @@ describe('images', () => {
 describe('a component this renderer does not know', () => {
   it('is skipped without taking the message down', () => {
     expect(render(comp('ProfileHeader', { name: 'x' }))).toBeNull();
+  });
+});
+
+describe('whether a message would draw anything at all', () => {
+  it('knows the components it can draw', () => {
+    expect(drawsAnything([comp('Heading', { text: 'Hi' })])).toBe(true);
+    expect(drawsAnything([comp('StoreButtons'), comp('ProfileHeader')])).toBe(true);
+  });
+
+  it('knows when nothing would draw, so the message can fall back', () => {
+    // A message saved before the builder's palette was narrowed.
+    expect(drawsAnything([comp('ProfileHeader'), comp('SocialRow'), comp('Avatar')])).toBe(false);
+    expect(drawsAnything([])).toBe(false);
+    expect(drawsAnything(undefined)).toBe(false);
+  });
+
+  it('survives content that is not shaped the way it expects', () => {
+    expect(() => drawsAnything([null as any, {} as any])).not.toThrow();
   });
 });
