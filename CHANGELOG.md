@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.7.0
+## 0.6.1
 
 ### Fixed
 
@@ -68,7 +68,6 @@ have end users receive as nothing at all or as something else.
   `/v1/api/messages`.
 - `MessageContent.zones`, which was missing from the type entirely.
 
-## 0.6.1 (unreleased, folded into 0.7.0)
 
 ### Fixed
 
