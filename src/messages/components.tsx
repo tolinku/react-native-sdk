@@ -140,13 +140,45 @@ function richText(text: string, onPressUrl: (url: string) => void): React.ReactN
 }
 
 /**
+ * The proportions of a remote image, once the platform can tell us.
+ *
+ * React Native cannot know them without asking, and asking is asynchronous, so
+ * a caller gets null until the answer arrives and lays out from a fallback in
+ * the meantime. `enabled` exists because measuring costs a request and is
+ * pointless when the size is already known.
+ */
+function useImageRatio(uri: string, enabled: boolean): number | null {
+  const [ratio, setRatio] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    if (!enabled || !uri) return;
+    let cancelled = false;
+    Image.getSize(
+      uri,
+      (w, h) => {
+        // Guarded so a slow answer cannot set state on an unmounted message,
+        // which is a warning in development and a leak in production.
+        if (!cancelled && w > 0 && h > 0) setRatio(w / h);
+      },
+      () => {
+        // Unreachable, or something the platform cannot measure. Callers fall
+        // back rather than render nothing.
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [uri, enabled]);
+
+  return ratio;
+}
+
+/**
  * An image sized the way the builder means it.
  *
  * A height left empty means natural proportions, not a fixed box. Picking a
  * number instead is how a 44px icon ends up as a 44 by 200 strip with its
- * middle cropped out, which is what every template icon looked like. React
- * Native cannot know an image's proportions without asking, so it asks, and
- * uses an aspect ratio once the answer arrives.
+ * middle cropped out, which is what every template icon looked like.
  */
 function MessageImage({
   uri,
@@ -165,26 +197,8 @@ function MessageImage({
   borderColor: string;
   alt: string;
 }): React.ReactElement {
-  const [ratio, setRatio] = React.useState<number | null>(null);
   const wantsNaturalHeight = height === undefined;
-
-  React.useEffect(() => {
-    if (!wantsNaturalHeight) return;
-    let cancelled = false;
-    Image.getSize(
-      uri,
-      (w, h) => {
-        if (!cancelled && w > 0 && h > 0) setRatio(w / h);
-      },
-      () => {
-        // Unreachable image, or one the platform cannot measure. The fallback
-        // height below still shows whatever does load.
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [uri, wantsNaturalHeight]);
+  const ratio = useImageRatio(uri, wantsNaturalHeight);
 
   const style: ImageStyle = {
     width: width ?? '100%',
@@ -208,6 +222,49 @@ function MessageImage({
       resizeMode={wantsNaturalHeight && !ratio ? 'contain' : 'cover'}
       accessibilityLabel={alt}
     />
+  );
+}
+
+/**
+ * One store badge, at the height the author asked for.
+ *
+ * A remote image in React Native needs both dimensions, so the width comes
+ * from the badge's own proportions rather than a number written here. Apple's
+ * and Google's artwork are close but not identical (3.47 against 3.46), and
+ * either way a guess shows as a badge slightly shorter than asked for, since
+ * "contain" shrinks it to fit whatever box it is given.
+ */
+function StoreBadge({
+  uri,
+  height,
+  label,
+  onPress,
+}: {
+  uri: string | undefined;
+  height: number;
+  label: string;
+  onPress: () => void;
+}): React.ReactElement {
+  const usable = !!uri && isSafeUrl(uri);
+  const ratio = useImageRatio(usable ? uri! : '', usable);
+
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.7} accessibilityRole="button">
+      {usable ? (
+        <Image
+          source={{ uri: uri! }}
+          // Until measured, a badge-shaped box. Both stores' artwork is within
+          // a percent of this, so the correction on arrival is imperceptible.
+          style={{ height, width: height * (ratio || 3.47), marginHorizontal: 6 }}
+          resizeMode="contain"
+          accessibilityLabel={label}
+        />
+      ) : (
+        // A text link rather than a blank space, for the case where the badge
+        // artwork itself cannot be loaded.
+        <Text style={{ color: '#1B1B1B', fontSize: 15, fontWeight: '600', marginHorizontal: 6 }}>{label}</Text>
+      )}
+    </TouchableOpacity>
   );
 }
 
@@ -461,26 +518,26 @@ export function PuckComponentRenderer({ component, messageId, options }: Compone
 
       // The badges are the official artwork, sent with the app context so the
       // SDK is not guessing an origin or a file name.
-      const badge = (uri: string | undefined, url: string, label: string) =>
-        uri && isSafeUrl(uri) ? (
-          <TouchableOpacity key={label} onPress={() => follow(url)} activeOpacity={0.7}>
-            <Image
-              source={{ uri }}
-              style={{ height, width: height * 3.375, marginHorizontal: 6 }}
-              resizeMode="contain"
-              accessibilityLabel={label}
-            />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity key={label} onPress={() => follow(url)} activeOpacity={0.7}>
-            <Text style={{ color: '#1B1B1B', fontSize: 15, fontWeight: '600', marginHorizontal: 6 }}>{label}</Text>
-          </TouchableOpacity>
-        );
-
       return (
         <View style={{ flexDirection: 'row', justifyContent, alignItems: 'center', flexWrap: 'wrap', marginVertical: 8 }}>
-          {showIos ? badge(app?.ios_badge_url, iosUrl, 'Download on the App Store') : null}
-          {showAndroid ? badge(app?.android_badge_url, androidUrl, 'Get it on Google Play') : null}
+          {showIos ? (
+            <StoreBadge
+              key="ios"
+              uri={app?.ios_badge_url}
+              height={height}
+              label="Download on the App Store"
+              onPress={() => follow(iosUrl)}
+            />
+          ) : null}
+          {showAndroid ? (
+            <StoreBadge
+              key="android"
+              uri={app?.android_badge_url}
+              height={height}
+              label="Get it on Google Play"
+              onPress={() => follow(androidUrl)}
+            />
+          ) : null}
         </View>
       );
     }

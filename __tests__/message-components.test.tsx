@@ -181,21 +181,39 @@ describe('the components that describe the app', () => {
     expect(el.props.style.backgroundColor).toBe('#f0f0f0');
   });
 
+  // The badges are their own component (they measure the artwork so the height
+  // the author asked for is the height that renders), so these assert on what
+  // each badge is handed: nested components are not rendered by a direct call.
+  const badges = (el: any) => (el.props.children as any[]).filter(Boolean);
+
   it('draws both store badges and follows them', () => {
     const onButtonPress = jest.fn();
     const el = render(comp('StoreButtons', {}), { app, onButtonPress });
-    const images = flatten(el).filter(n => n.type === 'Image');
-    expect(images.map(i => i.props.source.uri)).toEqual([app.ios_badge_url, app.android_badge_url]);
+    const rendered = badges(el);
 
-    const buttons = flatten(el).filter(n => n.type === 'TouchableOpacity');
-    buttons[0].props.onPress();
+    expect(rendered.map((b: any) => b.props.uri)).toEqual([app.ios_badge_url, app.android_badge_url]);
+    expect(rendered.map((b: any) => b.props.height)).toEqual([44, 44]);
+
+    rendered[0].props.onPress();
     expect(onButtonPress).toHaveBeenCalledWith(app.ios_store_url, 'm1');
+    rendered[1].props.onPress();
+    expect(onButtonPress).toHaveBeenCalledWith(app.android_store_url, 'm1');
   });
 
   it('omits a store with no url', () => {
     const el = render(comp('StoreButtons', {}), { app: { ...app, android_store_url: null } });
-    const images = flatten(el).filter(n => n.type === 'Image');
-    expect(images).toHaveLength(1);
+    expect(badges(el)).toHaveLength(1);
+  });
+
+  it('honours the authored height and hidden stores', () => {
+    const el = render(comp('StoreButtons', { height: 60, showAndroid: false }), { app });
+    const rendered = badges(el);
+    expect(rendered).toHaveLength(1);
+    expect(rendered[0].props.height).toBe(60);
+  });
+
+  it('renders nothing at all when neither store has a url', () => {
+    expect(render(comp('StoreButtons', {}), { app: { ...app, ios_store_url: null, android_store_url: null } })).toBeNull();
   });
 
   it('opens the app link from a deep link button', () => {
