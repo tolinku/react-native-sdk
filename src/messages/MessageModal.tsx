@@ -8,18 +8,34 @@ import {
   Text,
   StyleSheet,
 } from 'react-native';
-import type { Message, ShowMessageOptions } from '../types';
+import type { Message, MessageAppContext, ShowMessageOptions } from '../types';
 import { saveMessageDismissal } from '../storage';
-import { PuckComponentRenderer } from './components';
+import { PuckComponentRenderer, color, num } from './components';
 
 interface MessageModalProps {
   message: Message | null;
   visible: boolean;
   onClose: () => void;
   options: ShowMessageOptions;
+  app?: MessageAppContext | null;
 }
 
-export function MessageModal({ message, visible, onClose, options }: MessageModalProps): React.ReactElement {
+/**
+ * The colour a gradient starts with.
+ *
+ * React Native has no gradient without a native module this package will not
+ * pull in, and five of the stock message templates are designed on one. Left
+ * alone they arrive as a plain white card. The first stop is a much closer
+ * likeness than white, so the message still looks like the thing that was
+ * designed.
+ */
+function gradientStartColor(gradient: unknown): string | null {
+  if (typeof gradient !== 'string' || !gradient) return null;
+  const match = /#[0-9a-f]{3,8}|rgba?\([^)]*\)/i.exec(gradient);
+  return match ? match[0] : null;
+}
+
+export function MessageModal({ message, visible, onClose, options, app }: MessageModalProps): React.ReactElement {
   if (!message) {
     return <></>;
   }
@@ -30,6 +46,31 @@ export function MessageModal({ message, visible, onClose, options }: MessageModa
     onClose();
   };
 
+  const rootProps = (message.content?.root?.props || {}) as Record<string, unknown>;
+
+  // Root background: what the author set on the message surface, then the
+  // message's own colour field, then white. All of it was ignored before, so a
+  // message designed on a gradient arrived as a plain white card.
+  const background =
+    (typeof rootProps.bgColor === 'string' && rootProps.bgColor
+      ? color(rootProps.bgColor, '')
+      : '') ||
+    gradientStartColor(rootProps.bgGradient) ||
+    message.background_color ||
+    '#ffffff';
+
+  const cardStyle = {
+    backgroundColor: background,
+    padding: num(rootProps.padding, 24),
+    maxWidth: num(rootProps.contentWidth, 375),
+  };
+
+  const content = message.content?.content || [];
+
+  // A message may carry only a title and a body, with nothing designed in the
+  // builder at all. That used to render as an empty card with a close button.
+  const hasDesignedContent = content.length > 0;
+
   return (
     <Modal
       visible={visible}
@@ -38,7 +79,7 @@ export function MessageModal({ message, visible, onClose, options }: MessageModa
       onRequestClose={handleDismiss}
     >
       <Pressable style={styles.overlay} onPress={handleDismiss}>
-        <Pressable style={[styles.card, { backgroundColor: message.background_color || '#ffffff' }]} onPress={() => {}}>
+        <Pressable style={[styles.card, cardStyle]} onPress={() => {}}>
           <TouchableOpacity
             onPress={handleDismiss}
             style={styles.closeButton}
@@ -52,14 +93,26 @@ export function MessageModal({ message, visible, onClose, options }: MessageModa
             style={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {message.content?.content?.map((component, index) => (
-              <PuckComponentRenderer
-                key={`${message.id}-${index}-${component.type}`}
-                component={component}
-                messageId={message.id}
-                options={options}
-              />
-            ))}
+            {hasDesignedContent ? (
+              content.map((component, index) => (
+                <PuckComponentRenderer
+                  key={`${message.id}-${index}-${component.type}`}
+                  component={component}
+                  messageId={message.id}
+                  options={{
+                    ...options,
+                    zones: message.content?.zones,
+                    app,
+                    onRequestClose: handleDismiss,
+                  }}
+                />
+              ))
+            ) : (
+              <>
+                {message.title ? <Text style={styles.fallbackTitle}>{message.title}</Text> : null}
+                {message.body ? <Text style={styles.fallbackBody}>{message.body}</Text> : null}
+              </>
+            )}
           </ScrollView>
         </Pressable>
       </Pressable>
@@ -76,11 +129,9 @@ const styles = StyleSheet.create({
   },
   card: {
     position: 'relative',
-    maxWidth: 375,
     width: '90%',
     maxHeight: '80%',
     borderRadius: 16,
-    padding: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 20 },
     shadowOpacity: 0.3,
@@ -106,5 +157,18 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     marginTop: 8,
+  },
+  // Used only when a message has no designed content, so its title and body
+  // are all there is to show.
+  fallbackTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1B1B1B',
+    marginBottom: 8,
+  },
+  fallbackBody: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#555555',
   },
 });

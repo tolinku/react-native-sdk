@@ -19,6 +19,45 @@ export function isSafeUrl(url: string): boolean {
 }
 
 /**
+ * The schemes that can run code or forge an origin when something follows them.
+ */
+const EXECUTABLE_SCHEMES = new Set(['javascript:', 'vbscript:', 'data:', 'blob:', 'file:']);
+
+/**
+ * Check whether a URL is safe to follow when someone taps it.
+ *
+ * Deliberately not {@link isSafeUrl}. That one allows http and https only,
+ * which is right for an image source and wrong for a call to action: this is a
+ * deep linking product, so the most natural button in an in-app message is one
+ * that opens a screen in the app, `myapp://order/4821`. An allowlist blocked
+ * exactly that, silently, before the host app's own handler was even called,
+ * while the platform that authored the message has always permitted it.
+ *
+ * Every customer's scheme is different, so there is no list to allow. The small
+ * known set of dangerous schemes is named instead, matching the platform's own
+ * rule, and everything else is left to open.
+ *
+ * Parsing first is what makes this hold: tabs and newlines inside a scheme are
+ * ignored by the things that follow URLs, so "java\tscript:alert(1)" would run,
+ * and the URL parser strips them the same way before reporting the protocol.
+ */
+export function isSafeActionUrl(url: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+
+  try {
+    const parsed = new URL(trimmed);
+    return !EXECUTABLE_SCHEMES.has(parsed.protocol);
+  } catch {
+    // No scheme to parse means relative or a fragment. There is no base to
+    // resolve it against on a device, so it is not something to open.
+    return false;
+  }
+}
+
+/**
  * Validate that a base URL uses HTTPS, with exceptions for local development.
  * Throws an error if the URL is invalid.
  */

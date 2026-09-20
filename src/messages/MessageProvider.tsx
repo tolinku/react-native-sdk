@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import type { Message, ShowMessageOptions } from '../types';
+import type { Message, MessageAppContext, ShowMessageOptions } from '../types';
 import { isMessageDismissed, isMessageSuppressed, recordMessageImpression } from '../storage';
 import { MessageModal } from './MessageModal';
 import { Tolinku } from '../Tolinku';
@@ -34,6 +34,9 @@ export function TolinkuMessages({
 }: TolinkuMessagesProps): React.ReactElement {
   const [message, setMessage] = useState<Message | null>(null);
   const [visible, setVisible] = useState(false);
+  // Sent alongside the messages: AppIcon, StoreButtons and DeepLinkButton
+  // describe the app rather than the message, so the content cannot draw them.
+  const [app, setApp] = useState<MessageAppContext | null>(null);
 
   // Stabilize callback refs so they don't trigger re-fetches
   const onDismissRef = useRef(onDismiss);
@@ -60,8 +63,12 @@ export function TolinkuMessages({
         const userId = Tolinku.getUserId();
         if (userId) params.user_id = userId;
 
-        const data = await client.get<{ messages: Message[] }>('/v1/api/messages', params);
-        if (cancelled || !data.messages || data.messages.length === 0) return;
+        const data = await client.get<{ messages: Message[]; app?: MessageAppContext }>('/v1/api/messages', params);
+        if (cancelled) return;
+        // Kept whether or not a message ends up shown: it belongs to the app,
+        // not to any one message.
+        if (data.app) setApp(data.app);
+        if (!data.messages || data.messages.length === 0) return;
 
         // Filter dismissed/suppressed messages and optionally by triggerValue
         const candidates: Message[] = [];
@@ -104,6 +111,7 @@ export function TolinkuMessages({
       visible={visible}
       onClose={handleClose}
       options={options}
+      app={app}
     />
   );
 }

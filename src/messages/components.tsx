@@ -10,14 +10,14 @@ import {
   type ViewStyle,
   type ImageStyle,
 } from 'react-native';
-import type { MessageComponent, ShowMessageOptions } from '../types';
-import { isSafeUrl } from '../validation';
+import type { MessageAppContext, MessageComponent, ShowMessageOptions } from '../types';
+import { isSafeActionUrl, isSafeUrl } from '../validation';
 import { debugWarn } from '../debug';
 
 /** The only two shapes React Native lays out: a number, or a percentage. */
 type Size = number | `${number}%`;
 
-/** What an Image is given when its height is left empty or cannot be read. */
+/** What an Image is given when it has neither a height nor a measurable one. */
 const DEFAULT_IMAGE_HEIGHT: Size = 200;
 
 /**
@@ -30,73 +30,241 @@ const DEFAULT_IMAGE_HEIGHT: Size = 200;
  * image means it renders and cannot be seen, with the rest of the message
  * looking perfectly fine around the hole.
  *
- * Width was already read this way. Height was cast straight to a number, so
- * anyone who typed a height into the field lost the image, which is the one
- * thing the field is for.
- *
- * "auto" and anything unreadable fall back, because there is no honest way to
- * size an image we have not measured: a view of height auto with nothing to
- * derive it from is the same invisible zero.
+ * "auto" and anything unreadable return undefined, which callers read as "no
+ * opinion" and size from the content instead.
  */
-function dimension(raw: unknown, fallback: Size): Size {
+export function dimension(raw: unknown): Size | undefined {
   if (typeof raw === 'number' && isFinite(raw) && raw > 0) return raw;
-  if (typeof raw !== 'string') return fallback;
+  if (typeof raw !== 'string') return undefined;
 
   const value = raw.trim();
-  if (!value) return fallback;
+  if (!value) return undefined;
   if (value.endsWith('%')) {
-    return /^\d+(?:\.\d+)?%$/.test(value) ? (value as Size) : fallback;
+    return /^\d+(?:\.\d+)?%$/.test(value) ? (value as Size) : undefined;
   }
 
-  // parseInt would read "auto" as NaN and "200px" as 200, which is what we
-  // want, but it would also read "20rem" as 20. Only digits, with an optional
-  // px, are a size anyone meant.
+  // Only digits, with an optional px, are a size anyone meant. parseInt would
+  // also read "20rem" as 20, which is not what was asked for.
   const match = /^(\d+(?:\.\d+)?)(?:px)?$/i.exec(value);
   if (!match) {
-    debugWarn(`Image dimension "${raw}" is not a size React Native understands; using ${fallback}.`);
-    return fallback;
+    debugWarn(`Dimension "${raw}" is not a size React Native understands; ignoring it.`);
+    return undefined;
   }
   const parsed = parseFloat(match[1]!);
-  return parsed > 0 ? parsed : fallback;
+  return parsed > 0 ? parsed : undefined;
+}
+
+/**
+ * A number the author set, which may legitimately be zero.
+ *
+ * `props.x || fallback` throws away a deliberate 0, and 0 is exactly what an
+ * author picks for a square corner or a flush edge. Every stock message
+ * template sets borderRadius: 0 on its images, so the old form rounded the
+ * corners of every one of them on device only.
+ */
+export function num(raw: unknown, fallback: number): number {
+  if (typeof raw === 'number' && isFinite(raw)) return raw;
+  if (typeof raw === 'string' && raw.trim()) {
+    const parsed = parseFloat(raw);
+    if (isFinite(parsed)) return parsed;
+  }
+  return fallback;
+}
+
+/**
+ * A colour React Native can actually parse, or the fallback.
+ *
+ * The builder's colour fields are free text with no picker, so a browser form
+ * anything CSS accepts: `rgb(0 0 0 / 50%)`, `hsl(210 40% 98%)`, `color-mix()`,
+ * `var(--brand)`. React Native understands a much smaller set and simply drops
+ * what it cannot read, which for a button background means a white button with
+ * a white label, an invisible call to action rather than an ugly one.
+ */
+export function color(raw: unknown, fallback: string): string {
+  if (typeof raw !== 'string') return fallback;
+  const value = raw.trim();
+  if (!value) return fallback;
+
+  if (/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value)) return value;
+  // The comma forms only. The CSS space syntax, rgb(0 0 0 / 50%), is not
+  // understood by React Native.
+  if (/^(?:rgb|rgba|hsl|hsla)\(\s*[\d.]+\s*,[^)]*\)$/i.test(value)) return value;
+  if (/^[a-z]+$/i.test(value)) return value; // named colours, including transparent
+
+  debugWarn(`Colour "${raw}" is not one React Native can read; using ${fallback}.`);
+  return fallback;
+}
+
+/** The "soft" button variant's tint, matching the builder and the web. */
+function softVariant(hex: string): string {
+  return /^#[0-9a-f]{6}$/i.test(hex) ? `${hex}22` : hex;
+}
+
+/**
+ * Render the [text](url) links the TextBlock field promises.
+ *
+ * The field label says "Markdown links supported" and the builder preview
+ * draws them, so an author has every reason to believe they work. Only the
+ * preview did: everywhere else the brackets and the raw URL were shown to the
+ * end user as text.
+ */
+function richText(text: string, onPressUrl: (url: string) => void): React.ReactNode {
+  if (!text) return '';
+  const regex = /\[([^\]]+)\]\(([^)]+)\)/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
+    const [full, label, rawUrl] = match;
+    const url = (rawUrl || '').trim();
+    if (isSafeActionUrl(url)) {
+      parts.push(
+        <Text
+          key={`link-${key++}`}
+          style={{ textDecorationLine: 'underline' }}
+          onPress={() => onPressUrl(url)}
+        >
+          {label}
+        </Text>,
+      );
+    } else {
+      parts.push(full);
+    }
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return parts.length === 1 ? parts[0] : parts;
+}
+
+/**
+ * An image sized the way the builder means it.
+ *
+ * A height left empty means natural proportions, not a fixed box. Picking a
+ * number instead is how a 44px icon ends up as a 44 by 200 strip with its
+ * middle cropped out, which is what every template icon looked like. React
+ * Native cannot know an image's proportions without asking, so it asks, and
+ * uses an aspect ratio once the answer arrives.
+ */
+function MessageImage({
+  uri,
+  width,
+  height,
+  borderRadius,
+  borderWidth,
+  borderColor,
+  alt,
+}: {
+  uri: string;
+  width: Size | undefined;
+  height: Size | undefined;
+  borderRadius: number;
+  borderWidth: number;
+  borderColor: string;
+  alt: string;
+}): React.ReactElement {
+  const [ratio, setRatio] = React.useState<number | null>(null);
+  const wantsNaturalHeight = height === undefined;
+
+  React.useEffect(() => {
+    if (!wantsNaturalHeight) return;
+    let cancelled = false;
+    Image.getSize(
+      uri,
+      (w, h) => {
+        if (!cancelled && w > 0 && h > 0) setRatio(w / h);
+      },
+      () => {
+        // Unreachable image, or one the platform cannot measure. The fallback
+        // height below still shows whatever does load.
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [uri, wantsNaturalHeight]);
+
+  const style: ImageStyle = {
+    width: width ?? '100%',
+    borderRadius,
+    alignSelf: 'center',
+    marginBottom: 8,
+    ...(borderWidth > 0 ? { borderWidth, borderColor } : {}),
+    ...(wantsNaturalHeight
+      ? ratio
+        ? { aspectRatio: ratio }
+        : { height: DEFAULT_IMAGE_HEIGHT }
+      : { height }),
+  };
+
+  return (
+    <Image
+      source={{ uri }}
+      style={style}
+      // Contain while the proportions are still unknown, so a measurement that
+      // never arrives leaves the picture whole rather than cropped.
+      resizeMode={wantsNaturalHeight && !ratio ? 'contain' : 'cover'}
+      accessibilityLabel={alt}
+    />
+  );
+}
+
+export interface RenderOptions extends ShowMessageOptions {
+  /** Section children, keyed "<component id>:content", as Puck stores them. */
+  zones?: Record<string, MessageComponent[]>;
+  /** The app the message belongs to, for the components that describe it. */
+  app?: MessageAppContext | null;
+  /** Dismiss the message. A button action of "close" calls this. */
+  onRequestClose?: () => void;
 }
 
 interface ComponentRendererProps {
   component: MessageComponent;
   messageId: string;
-  options: ShowMessageOptions;
+  options: RenderOptions;
 }
 
 export function PuckComponentRenderer({ component, messageId, options }: ComponentRendererProps): React.ReactElement | null {
   const { props } = component;
+  const app = options.app;
+
+  /** Open a URL the way the host app asked us to, or the way the OS would. */
+  const follow = (url: string) => {
+    if (options.onButtonPress) options.onButtonPress(url, messageId);
+    else Linking.openURL(url).catch(() => {});
+  };
 
   switch (component.type) {
     case 'Heading': {
+      const fontSize = num(props.fontSize, 28);
       const style: TextStyle = {
-        fontSize: (props.fontSize as number) || 28,
+        fontSize,
         fontWeight: '700',
-        color: (props.color as string) || '#1B1B1B',
+        color: color(props.color, '#1B1B1B'),
         textAlign: (props.alignment as TextStyle['textAlign']) || 'left',
-        lineHeight: ((props.fontSize as number) || 28) * 1.2,
+        lineHeight: fontSize * 1.2,
         marginBottom: 8,
       };
       return <Text style={style}>{(props.text as string) || ''}</Text>;
     }
 
     case 'TextBlock': {
+      const fontSize = num(props.fontSize, 15);
       const style: TextStyle = {
-        fontSize: (props.fontSize as number) || 15,
-        color: (props.color as string) || '#555555',
+        fontSize,
+        color: color(props.color, '#555555'),
         textAlign: (props.alignment as TextStyle['textAlign']) || 'left',
-        lineHeight: ((props.fontSize as number) || 15) * 1.5,
+        lineHeight: fontSize * 1.5,
         marginBottom: 8,
       };
-      return <Text style={style}>{(props.content as string) || ''}</Text>;
+      return <Text style={style}>{richText((props.content as string) || '', follow)}</Text>;
     }
 
     case 'Image': {
       const imageUrl = (props.url as string) || '';
 
-      // Skip rendering if URL is empty or not safe
       if (!imageUrl || !imageUrl.trim()) {
         debugWarn('Image component has empty URL, skipping render.');
         return null;
@@ -106,77 +274,107 @@ export function PuckComponentRenderer({ component, messageId, options }: Compone
         return null;
       }
 
-      const style: ImageStyle = {
-        width: dimension(props.width, '100%'),
-        height: dimension(props.height, DEFAULT_IMAGE_HEIGHT),
-        borderRadius: (props.borderRadius as number) || 8,
-        alignSelf: 'center',
-        marginBottom: 8,
-      };
       return (
-        <Image
-          source={{ uri: imageUrl }}
-          style={style}
-          resizeMode="cover"
-          accessibilityLabel={(props.alt as string) || ''}
+        <MessageImage
+          uri={imageUrl}
+          width={dimension(props.width) ?? '100%'}
+          height={dimension(props.height)}
+          borderRadius={num(props.borderRadius, 8)}
+          borderWidth={num(props.borderWidth, 0)}
+          borderColor={color(props.borderColor, '#1B1B1B')}
+          alt={(props.alt as string) || ''}
         />
       );
     }
 
-    case 'Button': {
-        const handlePress = () => {
-          const action = (props.action as string) || '';
-          if (!action) return;
+    case 'Button':
+    case 'DeepLinkButton': {
+      const isDeepLink = component.type === 'DeepLinkButton';
+      // A deep link button opens the app's own link, which the message content
+      // has no way to know; it comes with the app context.
+      const action = isDeepLink ? app?.deep_link_url || '' : (props.action as string) || '';
+      const label = isDeepLink
+        ? (props.label as string) || 'Open in App'
+        : (props.label as string) || '';
 
-          // Checked before either path, including the caller's own handler. The
-          // URL comes from message content, and a handler is ordinary app code
-          // that will reasonably pass it to Linking.openURL without looking. The
-          // Android and Flutter SDKs validate in the same place.
-          if (!isSafeUrl(action)) {
-            debugWarn(`Button action URL blocked (unsafe protocol): ${action}`);
-            return;
-          }
+      // A deep link button with nowhere to point is a dead control, so it is
+      // left out rather than drawn.
+      if (isDeepLink && !action) return null;
 
-          if (options.onButtonPress) {
-            options.onButtonPress(action, messageId);
-          } else {
-            Linking.openURL(action).catch(() => {});
-          }
-        };
+      const handlePress = () => {
+        if (!action) return;
+
+        // "close" is an action the builder offers and the WebView renderer has
+        // always honoured. Here it used to fail the URL check and do nothing,
+        // so a dismiss button left the message on screen.
+        if (action === 'close') {
+          options.onRequestClose?.();
+          return;
+        }
+
+        // Checked before either path, including the caller's own handler. The
+        // URL comes from message content, and a handler is ordinary app code
+        // that will reasonably pass it to Linking.openURL without looking.
+        if (!isSafeActionUrl(action)) {
+          debugWarn(`Button action URL blocked (unsafe protocol): ${action}`);
+          return;
+        }
+
+        follow(action);
+      };
+
+      const variant = (props.style as string) || 'filled';
+      const isOutline = variant === 'outline';
+      const isSoft = variant === 'soft';
+      const baseColor = color(props.bgColor, '#1B1B1B');
+      const background = isOutline ? 'transparent' : isSoft ? softVariant(baseColor) : baseColor;
+      const labelColor = isOutline || isSoft ? baseColor : color(props.textColor, '#ffffff');
 
       const containerStyle: ViewStyle = {
-        backgroundColor: (props.bgColor as string) || '#1B1B1B',
-        borderRadius: (props.borderRadius as number) || 8,
-        paddingVertical: 10,
-        paddingHorizontal: 20,
+        backgroundColor: background,
+        borderRadius: num(props.borderRadius, 8),
+        paddingVertical: 12,
+        paddingHorizontal: 24,
         marginVertical: 8,
         alignItems: 'center',
-        ...(props.fullWidth ? { width: '100%' } : {}),
+        ...(isOutline ? { borderWidth: 2, borderColor: baseColor } : {}),
+        // A button that is not full width is a compact, centred one. Without
+        // alignSelf it stretches to the column anyway, which made the setting
+        // do nothing at all.
+        ...(props.fullWidth ? { width: '100%' as const } : { alignSelf: 'center' as const }),
       };
 
       const textStyle: TextStyle = {
-        color: (props.textColor as string) || '#ffffff',
-        fontSize: (props.fontSize as number) || 16,
+        color: labelColor,
+        fontSize: num(props.fontSize, 16),
         fontWeight: '600',
       };
 
+      const emoji = (props.emoji as string) || '';
+
       return (
         <TouchableOpacity onPress={handlePress} style={containerStyle} activeOpacity={0.7}>
-          <Text style={textStyle}>{(props.label as string) || 'Click'}</Text>
+          <Text style={textStyle}>{emoji ? `${emoji} ${label}` : label}</Text>
         </TouchableOpacity>
       );
     }
 
     case 'Section': {
-      const children = (props.children as MessageComponent[]) || [];
+      // Puck stores a drop zone's children under "<component id>:content" at
+      // the top level of the content, never in props.children. Reading
+      // props.children rendered every Section as an empty box and lost
+      // everything an author put inside it.
+      const zoneKey = `${(props.id as string) || ''}:content`;
+      const children = options.zones?.[zoneKey] || [];
+
       const containerStyle: ViewStyle = {
-        backgroundColor: (props.bgColor as string) || undefined,
-        padding: (props.padding as number) || 16,
-        borderRadius: (props.borderRadius as number) || 0,
+        backgroundColor: typeof props.bgColor === 'string' && props.bgColor
+          ? color(props.bgColor, 'transparent')
+          : undefined,
+        padding: num(props.padding, 16),
+        borderRadius: num(props.borderRadius, 0),
         marginVertical: 8,
       };
-
-      const bgImage = (props.bgImage as string) || '';
 
       const content = children.map((child, index) => (
         <PuckComponentRenderer
@@ -187,8 +385,8 @@ export function PuckComponentRenderer({ component, messageId, options }: Compone
         />
       ));
 
+      const bgImage = (props.bgImage as string) || '';
       if (bgImage) {
-        // Validate background image URL
         if (!isSafeUrl(bgImage)) {
           debugWarn(`Section background image URL blocked (unsafe protocol): ${bgImage}`);
           return <View style={containerStyle}>{content}</View>;
@@ -199,7 +397,7 @@ export function PuckComponentRenderer({ component, messageId, options }: Compone
             source={{ uri: bgImage }}
             style={containerStyle}
             resizeMode={(props.bgSize as string) === 'contain' ? 'contain' : 'cover'}
-            imageStyle={{ borderRadius: (props.borderRadius as number) || 0 }}
+            imageStyle={{ borderRadius: num(props.borderRadius, 0) }}
           >
             {content}
           </ImageBackground>
@@ -209,23 +407,86 @@ export function PuckComponentRenderer({ component, messageId, options }: Compone
       return <View style={containerStyle}>{content}</View>;
     }
 
-    case 'Spacer': {
-      const style: ViewStyle = {
-        height: (props.height as number) || 24,
-      };
-      return <View style={style} />;
+    case 'Spacer':
+      return <View style={{ height: num(props.height, 24) }} />;
+
+    case 'Divider':
+      return (
+        <View
+          style={{
+            borderTopWidth: num(props.thickness, 1),
+            borderTopColor: color(props.color, '#e5e5e5'),
+            marginVertical: 8,
+          }}
+        />
+      );
+
+    case 'AppIcon': {
+      const size = num(props.size, 80);
+      const borderRadius = num(props.borderRadius, 16);
+      const iconUrl = app?.icon_url || '';
+
+      // A placeholder rather than a hole. The author put an icon here, and an
+      // app with no logo set is a setting to fix, not a reason to render a
+      // message with a gap in it.
+      if (!iconUrl || !isSafeUrl(iconUrl)) {
+        return (
+          <View
+            style={{ width: size, height: size, borderRadius, backgroundColor: '#f0f0f0', alignSelf: 'center', marginBottom: 8 }}
+          />
+        );
+      }
+
+      return (
+        <Image
+          source={{ uri: iconUrl }}
+          style={{ width: size, height: size, borderRadius, alignSelf: 'center', marginBottom: 8 }}
+          resizeMode="cover"
+          accessibilityLabel={app?.name || 'App icon'}
+        />
+      );
     }
 
-    case 'Divider': {
-      const style: ViewStyle = {
-        borderTopWidth: (props.thickness as number) || 1,
-        borderTopColor: (props.color as string) || '#e5e5e5',
-        marginVertical: 8,
-      };
-      return <View style={style} />;
+    case 'StoreButtons': {
+      const iosUrl = (props.iosUrlOverride as string) || app?.ios_store_url || '';
+      const androidUrl = (props.androidUrlOverride as string) || app?.android_store_url || '';
+      const showIos = props.showIos !== false && !!iosUrl;
+      const showAndroid = props.showAndroid !== false && !!androidUrl;
+      if (!showIos && !showAndroid) return null;
+
+      const height = num(props.height, 44);
+      const alignment = props.alignment as string;
+      const justifyContent =
+        alignment === 'left' ? 'flex-start' : alignment === 'right' ? 'flex-end' : 'center';
+
+      // The badges are the official artwork, sent with the app context so the
+      // SDK is not guessing an origin or a file name.
+      const badge = (uri: string | undefined, url: string, label: string) =>
+        uri && isSafeUrl(uri) ? (
+          <TouchableOpacity key={label} onPress={() => follow(url)} activeOpacity={0.7}>
+            <Image
+              source={{ uri }}
+              style={{ height, width: height * 3.375, marginHorizontal: 6 }}
+              resizeMode="contain"
+              accessibilityLabel={label}
+            />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity key={label} onPress={() => follow(url)} activeOpacity={0.7}>
+            <Text style={{ color: '#1B1B1B', fontSize: 15, fontWeight: '600', marginHorizontal: 6 }}>{label}</Text>
+          </TouchableOpacity>
+        );
+
+      return (
+        <View style={{ flexDirection: 'row', justifyContent, alignItems: 'center', flexWrap: 'wrap', marginVertical: 8 }}>
+          {showIos ? badge(app?.ios_badge_url, iosUrl, 'Download on the App Store') : null}
+          {showAndroid ? badge(app?.android_badge_url, androidUrl, 'Get it on Google Play') : null}
+        </View>
+      );
     }
 
     default:
+      debugWarn(`Message component "${component.type}" is not supported here; skipping it.`);
       return null;
   }
 }

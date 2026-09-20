@@ -1,5 +1,5 @@
 /** SDK version */
-export const SDK_VERSION = '0.6.1';
+export const SDK_VERSION = '0.7.0';
 
 /** Configuration options for the Tolinku SDK */
 export interface TolinkuConfig {
@@ -168,6 +168,31 @@ export interface Message {
 export interface MessageContent {
   root: { props: Record<string, unknown> };
   content: MessageComponent[];
+  /**
+   * A Section's children, keyed "<component id>:content".
+   *
+   * Puck keeps nested content here rather than on the parent's props, so a
+   * renderer that reads props.children finds nothing and draws every Section
+   * as an empty box. This was missing from the type entirely, which is part of
+   * how that went unnoticed.
+   */
+  zones?: Record<string, MessageComponent[]>;
+}
+
+/**
+ * The app a message belongs to, sent alongside it.
+ *
+ * AppIcon, StoreButtons and DeepLinkButton describe the app rather than the
+ * message, so the content has nothing to draw them from.
+ */
+export interface MessageAppContext {
+  name: string;
+  icon_url: string | null;
+  ios_store_url: string | null;
+  android_store_url: string | null;
+  deep_link_url: string | null;
+  ios_badge_url: string;
+  android_badge_url: string;
 }
 
 /** A single Puck component */
