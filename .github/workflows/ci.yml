@@ -29,6 +29,13 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
+        with:
+          # The action installs the "tools" package by default. Google removed
+          # it from the SDK repository, so every run started failing on setup
+          # rather than on anything in this module. An empty list installs the
+          # command line tools and nothing else, which is all the compile below
+          # needs.
+          packages: ''
       - uses: gradle/actions/setup-gradle@v4
         with:
           # Pinned because the action installs the newest Gradle, and the module
