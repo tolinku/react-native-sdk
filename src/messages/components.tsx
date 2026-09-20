@@ -143,7 +143,15 @@ export function color(raw: unknown, fallback: string): string {
  * empty block. Anything else falls back to filled, which is readable.
  */
 function softVariant(hex: string): string | null {
-  return /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(hex) ? `${hex}22` : null;
+  if (/^#[0-9a-f]{6}$/i.test(hex)) return `${hex}22`;
+  // A three digit hex has to be expanded first: "#abc" + "22" is five digits,
+  // which is not a colour in any form, so the tint would be dropped and the
+  // button would lose its background entirely.
+  if (/^#[0-9a-f]{3}$/i.test(hex)) {
+    const [, r, g, b] = hex;
+    return `#${r}${r}${g}${g}${b}${b}22`;
+  }
+  return null;
 }
 
 /**

@@ -282,3 +282,30 @@ describe('whether a message would draw anything at all', () => {
     expect(() => drawsAnything([null as any, {} as any])).not.toThrow();
   });
 });
+
+describe('the soft button variant', () => {
+  const softBackground = (bgColor: string) =>
+    render(comp('Button', { label: 'Go', style: 'soft', bgColor, action: 'https://example.com' }))
+      .props.style.backgroundColor;
+
+  it('tints a six digit hex', () => {
+    expect(softBackground('#1B1B1B')).toBe('#1B1B1B22');
+  });
+
+  it('expands a three digit hex before tinting it', () => {
+    // "#abc" + "22" is five digits, which is not a colour, so the background
+    // would be dropped and the button would lose it entirely.
+    expect(softBackground('#abc')).toBe('#aabbcc22');
+  });
+
+  it('falls back to filled where the colour cannot be tinted', () => {
+    // Otherwise the label, which a soft button draws in the base colour, is
+    // the same colour as the background: an invisible button.
+    for (const untintable of ['blue', 'rgb(27,27,27)', '#1B1B1BFF']) {
+      const el = render(comp('Button', { label: 'Go', style: 'soft', bgColor: untintable, textColor: '#ffffff', action: 'https://example.com' }));
+      expect(el.props.style.backgroundColor).toBe(untintable);
+      const label = flatten(el).find(n => n.type === 'Text');
+      expect(label.props.style.color).toBe('#ffffff');
+    }
+  });
+});
