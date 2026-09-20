@@ -14,6 +14,52 @@ import type { MessageComponent, ShowMessageOptions } from '../types';
 import { isSafeUrl } from '../validation';
 import { debugWarn } from '../debug';
 
+/** The only two shapes React Native lays out: a number, or a percentage. */
+type Size = number | `${number}%`;
+
+/** What an Image is given when its height is left empty or cannot be read. */
+const DEFAULT_IMAGE_HEIGHT: Size = 200;
+
+/**
+ * Turn a dimension the message builder wrote into one React Native accepts.
+ *
+ * The builder's width and height are free text: "100%", "200", "200px" and
+ * "auto" are all things it invites people to type. React Native takes a number
+ * or a percentage string and nothing else, so "200" and "200px" are not sizes
+ * to it, they are mistakes. A view given one lays out at zero, which for an
+ * image means it renders and cannot be seen, with the rest of the message
+ * looking perfectly fine around the hole.
+ *
+ * Width was already read this way. Height was cast straight to a number, so
+ * anyone who typed a height into the field lost the image, which is the one
+ * thing the field is for.
+ *
+ * "auto" and anything unreadable fall back, because there is no honest way to
+ * size an image we have not measured: a view of height auto with nothing to
+ * derive it from is the same invisible zero.
+ */
+function dimension(raw: unknown, fallback: Size): Size {
+  if (typeof raw === 'number' && isFinite(raw) && raw > 0) return raw;
+  if (typeof raw !== 'string') return fallback;
+
+  const value = raw.trim();
+  if (!value) return fallback;
+  if (value.endsWith('%')) {
+    return /^\d+(?:\.\d+)?%$/.test(value) ? (value as Size) : fallback;
+  }
+
+  // parseInt would read "auto" as NaN and "200px" as 200, which is what we
+  // want, but it would also read "20rem" as 20. Only digits, with an optional
+  // px, are a size anyone meant.
+  const match = /^(\d+(?:\.\d+)?)(?:px)?$/i.exec(value);
+  if (!match) {
+    debugWarn(`Image dimension "${raw}" is not a size React Native understands; using ${fallback}.`);
+    return fallback;
+  }
+  const parsed = parseFloat(match[1]!);
+  return parsed > 0 ? parsed : fallback;
+}
+
 interface ComponentRendererProps {
   component: MessageComponent;
   messageId: string;
@@ -60,20 +106,9 @@ export function PuckComponentRenderer({ component, messageId, options }: Compone
         return null;
       }
 
-      const widthRaw = (props.width as string) || '100%';
-      let imageWidth: number | string = '100%';
-      if (widthRaw.endsWith('px')) {
-        imageWidth = parseInt(widthRaw, 10);
-      } else if (widthRaw.endsWith('%')) {
-        imageWidth = widthRaw;
-      } else {
-        const parsed = parseInt(widthRaw, 10);
-        imageWidth = isNaN(parsed) ? '100%' : parsed;
-      }
-
       const style: ImageStyle = {
-        width: imageWidth as number,
-        height: (props.height as number) || 200,
+        width: dimension(props.width, '100%'),
+        height: dimension(props.height, DEFAULT_IMAGE_HEIGHT),
         borderRadius: (props.borderRadius as number) || 8,
         alignSelf: 'center',
         marginBottom: 8,

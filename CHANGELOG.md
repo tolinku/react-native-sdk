@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.1
+
+### Fixed
+
+- An image in an in-app message vanished when its height was set in the
+  dashboard.
+
+  The builder's width and height are free text, and the field itself offers
+  "auto", "200" and "200px" as examples. React Native takes a number or a
+  percentage and nothing else: it lays out a view given anything else at zero,
+  which for an image means it renders and cannot be seen, with the text and
+  buttons around it looking perfectly fine. Width was already read this way;
+  height was cast straight to a number, so typing a height into the field, the
+  one thing the field is for, lost the image.
+
+  Both are now read the same way and always resolve to something React Native
+  can lay out. A height of "auto" falls back to 200, because an image that has
+  not been measured cannot be sized from nothing, and the fallback at least
+  renders.
+
 ## 0.6.0
 
 ### Added
