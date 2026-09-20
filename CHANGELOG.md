@@ -39,6 +39,28 @@ have end users receive as nothing at all or as something else.
   rendered when there is no designed content.
 - Spacing matches the other renderers, so a message is the height it was
   designed to be.
+- **On React Native itself: every URL check said no.** This package read
+  `new URL(x).protocol`. React Native installs its own URL over the global one,
+  and for most of the versions supported here its getters are stubs that throw
+  (`protocol`, `hostname`, `host` and `origin` are all "is not implemented" in
+  0.73 and gained real bodies only much later). Every call sat inside a try, so
+  the throw read as "unparseable" and the answer was always no.
+
+  On a device that meant no image in any message, every button inert, every
+  markdown link shown as brackets and a raw URL, and the app icon permanently a
+  placeholder. It also reached beyond messages: `Links.resolve` read `origin`
+  outside its try, so short link resolution threw despite being documented never
+  to throw, and `trackLinkOpen` did the same in a call the docs show being made
+  without awaiting it. Both have been failing this way since 0.6.0 for anyone on
+  an older React Native.
+
+  Schemes are parsed here now rather than asked of the platform, and the tests
+  run against the URL React Native actually ships, since running them on Node's
+  is what let this pass unnoticed.
+- A section whose zone names itself recursed until the app was killed, with no
+  error and nothing on screen. Nesting is capped, a malformed component is
+  skipped rather than allowed to throw mid render, and a colour React Native
+  cannot parse falls back instead of taking the element with it.
 
 ### Added
 
