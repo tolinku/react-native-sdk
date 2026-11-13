@@ -9,10 +9,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
       - run: npm ci
       - run: npm run build
       - run: npm test
@@ -23,12 +23,12 @@ jobs:
   android:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
         with:
           # The action installs the "tools" package by default. Google removed
           # it from the SDK repository, so every run started failing on setup
@@ -36,24 +36,35 @@ jobs:
           # command line tools and nothing else, which is all the compile below
           # needs.
           packages: ''
-      - uses: gradle/actions/setup-gradle@v4
+      # setup-gradle v5, not v6, deliberately. v6 moved this action's caching
+      # into a separate closed-source library and dropped its configuration
+      # cache support pending a reimplementation. v5 is the last fully
+      # open-source line and nothing here needs what v6 adds, so this is a
+      # choice rather than a version left behind.
+      - uses: gradle/actions/setup-gradle@v5
         with:
-          # Pinned because the action installs the newest Gradle, and the module
-          # declares AGP 8.1.4, which does not run on Gradle 9. Left unpinned it
-          # fails while evaluating the build file, which reads like a fault in
-          # this module rather than a version pair that cannot work together.
+          # Pinned, and pinned to match the AGP the module declares: AGP 9 does
+          # not run on Gradle 8, and Gradle 9 does not run AGP 8. Left unpinned
+          # the action installs the newest Gradle, and a mismatch fails while
+          # evaluating the build file, which reads like a fault in this module
+          # rather than a version pair that cannot work together.
           #
-          # 8.5 is what the Android SDK's own wrapper uses, so this compiles the
-          # module the same way it is compiled by hand. Inside a host app the
-          # app's wrapper decides, which is the whole reason the React Native
+          # This is what the Android SDK's own wrapper uses, so the module is
+          # compiled here the same way it is compiled by hand. Inside a host app
+          # the app's wrapper decides, which is the whole reason the React Native
           # dependency here is left unversioned.
-          gradle-version: '8.5'
+          gradle-version: '9.9.1'
       - name: Compile the install referrer module
         run: |
           # The module has no settings.gradle of its own: inside a host app it is
           # included by autolinking. One is written here so it can build
           # standalone, and removed again so the tree is left unchanged.
           printf 'rootProject.name = "tolinku-rn-android"\n' > android/settings.gradle
+          # The version here has to be one that actually resolves. react-android
+          # on Maven Central starts at 0.77.3, so the 0.73.11 this used to pass
+          # could never be fetched and this step was failing on the dependency
+          # rather than compiling anything. It now matches the React Native the
+          # JavaScript side is tested against.
           gradle -p android assembleRelease \
-            -PtolinkuReactAndroidVersion=0.73.11 -Pandroid.useAndroidX=true --no-daemon
+            -PtolinkuReactAndroidVersion=0.88.1 -Pandroid.useAndroidX=true --no-daemon
           rm android/settings.gradle

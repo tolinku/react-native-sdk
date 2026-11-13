@@ -20,7 +20,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath("com.android.tools.build:gradle:8.1.4")
+        classpath("com.android.tools.build:gradle:9.5.1")
     }
 }
 
@@ -35,20 +35,28 @@ android {
     // namespace, so the old manifest package attribute is not needed.
     namespace "com.tolinku.rnsdk"
 
-    compileSdkVersion safeExtGet("compileSdkVersion", 34)
+    // Property form, not compileSdkVersion(): the method was removed in AGP 9,
+    // and the property has existed since AGP 7.0, which is below the AGP 7.4
+    // that this package's React Native 0.72 floor ships with. So this reads
+    // correctly on every host in the supported range rather than only new ones.
+    compileSdk safeExtGet("compileSdkVersion", 36)
 
     defaultConfig {
         // The Install Referrer library needs 21; the host app decides above that.
-        minSdkVersion safeExtGet("minSdkVersion", 21)
-        targetSdkVersion safeExtGet("targetSdkVersion", 34)
+        minSdk safeExtGet("minSdkVersion", 21)
+        // Google Play has required targetSdk 36 since 31 August 2026, so a
+        // host that leaves this to the fallback should land on a value it can
+        // still publish with.
+        targetSdk safeExtGet("targetSdkVersion", 36)
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
     }
 
-    lintOptions {
+    // lint, not lintOptions: renamed in AGP 7.0 and removed in AGP 9.
+    lint {
         abortOnError false
     }
 }

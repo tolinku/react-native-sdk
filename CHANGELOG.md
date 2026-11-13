@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.7.0
+
+### Fixed
+
+- A request that timed out was not recognised as a timeout.
+
+  The retry logic tested `err instanceof DOMException` to spot an abort. React
+  Native has no DOM, and whether `DOMException` exists as a global depends on
+  the engine and on which `AbortController` implementation is in play. The
+  check compiled only because React Native's older type definitions pulled DOM
+  globals in behind our backs, and on any engine without that global a timed
+  out request fell through to the generic network branch instead of raising the
+  timeout error this SDK documents.
+
+  The abort is now identified by the error's `name`, which every
+  implementation agrees on, including the browser's.
+
+- `crypto` is read from `globalThis` rather than named as a bare global, so
+  generating a cart ID type checks on React Native 0.88, whose definitions no
+  longer declare it. The runtime guard was already there; only the way it is
+  written changed.
+
+### Changed
+
+- The bundled Android module is now written for Android Gradle plugin 9 as well
+  as 8. `compileSdkVersion`, `minSdkVersion`, `targetSdkVersion` and
+  `lintOptions` were all removed in AGP 9; the property forms used instead have
+  existed since AGP 7.0, which is below the AGP 7.4 that this package's React
+  Native 0.72 floor ships with. Host apps on either AGP build it unchanged.
+
+  Where the host app does not set them, the compile and target SDK fallbacks
+  are now 36 rather than 34, which is what Google Play has required since
+  31 August 2026. Java source and target compatibility move from 8 to 11.
+
+  `ReactPackage.createNativeModules` is deprecated from React Native 0.88 in
+  favour of `BaseReactPackage`, which arrived in 0.74. Adopting it would drop
+  support for 0.72 and 0.73 to silence a warning, so it is left as it is and
+  the reason is recorded in the source.
+
+- Dev tooling: jest 29 to 30, TypeScript 5.4 to 6.0, tsup 8 to 9, and the test
+  matrix now runs React 19 and React Native 0.88. The declared peer range is
+  unchanged, so nothing is dropped. Two transitive dev dependencies are pinned
+  past published advisories that jest has not yet picked up itself.
+
 ## 0.6.1
 
 ### Fixed

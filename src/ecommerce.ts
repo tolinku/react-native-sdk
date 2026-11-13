@@ -263,9 +263,14 @@ export class Ecommerce {
   }
 
   private generateId(): string {
-    // React Native has crypto.randomUUID in Hermes (React Native 0.74+)
-    if (typeof crypto !== 'undefined' && typeof (crypto as any).randomUUID === 'function') {
-      return (crypto as any).randomUUID();
+    // Hermes has crypto.randomUUID from React Native 0.74, and older engines
+    // and polyfill-free builds have no crypto at all, so this is read off
+    // globalThis rather than named as a bare global. React Native's types used
+    // to declare `crypto` for us; they no longer do, and naming it directly
+    // stopped compiling on React Native 0.88 for that reason.
+    const g = globalThis as { crypto?: { randomUUID?: () => string } };
+    if (typeof g.crypto?.randomUUID === 'function') {
+      return g.crypto.randomUUID();
     }
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
       const r = (Math.random() * 16) | 0;
