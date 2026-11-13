@@ -9,6 +9,27 @@ const BASE_DELAY_MS = 500;
 /** Maximum random jitter added to each retry delay, in milliseconds. */
 const MAX_JITTER_MS = 250;
 
+/**
+ * Whether a caught value is an abort, from either the timeout or destroy().
+ *
+ * Read off the name rather than tested with `instanceof DOMException`. React
+ * Native has no DOM, so whether `DOMException` exists as a global at all
+ * depends on the engine and on which AbortController implementation is in
+ * play: Hermes supplies its own, a polyfill supplies another, and neither is
+ * obliged to reject with a real DOMException. The name is the one part every
+ * implementation agrees on, including the browser's. The previous check
+ * compiled only because React Native's older type definitions pulled DOM
+ * globals in behind our backs, and it would have quietly stopped recognising
+ * a timeout on any engine without that global.
+ */
+function isAbortError(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    (err as { name?: unknown }).name === 'AbortError'
+  );
+}
+
 export class HttpClient {
   private baseUrl: string;
   private apiKey: string;
@@ -204,7 +225,7 @@ export class HttpClient {
         }
 
         // AbortController timeout
-        if (err instanceof DOMException && err.name === 'AbortError') {
+        if (isAbortError(err)) {
           const timeoutErr = new TolinkuError(`Tolinku: request timed out after ${this.timeout}ms`, 0);
           if (attempt === MAX_RETRIES) throw timeoutErr;
           lastError = timeoutErr;
