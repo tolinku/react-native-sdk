@@ -315,6 +315,64 @@ await Tolinku.destroy();
 | `onButtonPress` | Callback for button presses, including your own app's deep link scheme |
 | `onDismiss` | Callback for message dismissal |
 
+## Privacy
+
+This package ships no `PrivacyInfo.xcprivacy`, and that is the correct answer
+rather than a gap. It has no native iOS code: `android/` holds a small Java
+module for the Play Install Referrer, and everything on iOS runs in JavaScript
+over `fetch`. A privacy manifest is read out of a bundle, an iOS package has no
+bundle unless it compiles something, and Apple requires a manifest of an SDK
+that calls a required-reason API. This package calls none.
+
+What could apply reaches you through a dependency that declares it itself.
+`@react-native-async-storage/async-storage`, which we use for in-app message
+dismissal state, impressions and last-shown timestamps, ships a manifest
+declaring `NSPrivacyAccessedAPICategoryFileTimestamp` with reason `C617.1`,
+checked against 3.1.1. Our peer range allows versions older than the manifest
+requirement, so if you are pinned below 1.21 check your own copy rather than
+taking this on trust. We add nothing to it either way.
+
+If you are auditing us, the equivalent for our other packages is
+`Sources/TolinkuSDK/PrivacyInfo.xcprivacy` in
+[ios-sdk](https://github.com/tolinku/ios-sdk) and
+`ios/tolinku/Sources/tolinku/PrivacyInfo.xcprivacy` in
+[flutter-sdk](https://github.com/tolinku/flutter-sdk). Both declare
+`NSPrivacyTracking` false.
+
+### Tracking
+
+The SDK never reads the advertising identifier, never calls App Tracking
+Transparency, and never joins a person's activity to data from another
+company's apps or sites. Deferred matching compares coarse device signals
+inside Tolinku and discards them. You do not need an ATT prompt on our account.
+
+### What the SDK sends, and which of your calls cause it
+
+Apple's privacy label and Google's Data Safety form both ask you to describe
+your dependencies. This is the table to fill them from. It covers the whole
+surface, which is almost certainly more than your integration uses. Nothing is
+sent on your behalf: `Tolinku.links.resolve` makes no analytics call, and
+`trackLinkOpen` is something you invoke.
+
+| Apple's category | Triggered by | What is sent |
+|---|---|---|
+| Other Data Types | `Tolinku.deferred.claimBySignals` | IANA timezone, BCP-47 language with region, screen size, pixel ratio, OS version. Compared against the signals recorded at click time, then discarded. Not linked to an identity. |
+| Product Interaction | `trackLinkOpen`, `track`, and the ecommerce interaction events (`viewItem`, `addToCart`, `removeFromCart`, `viewCart`, `addToWishlist`, `share`, `rate`) | The event name and whatever properties you attach |
+| Search History | `Tolinku.ecommerce.search` | The `search_term` you pass |
+| Purchase History | `purchase`, `refund`, `beginCheckout` | Transaction id, revenue, currency, line items |
+| User ID | `Tolinku.setUserId`, and the referral calls | Your own identifier for the person. The SDK never derives one |
+| Name | The optional `userName` on the referral calls | A display name for a referral leaderboard. Omit it and nothing in this category is sent |
+
+Everything above except Other Data Types is linked to identity once you call
+`Tolinku.setUserId`, because the SDK then attaches `user_id` to every event. If
+you never call it, those flows carry no identifier from us.
+
+On Android, the Play Install Referrer is read through
+`com.android.installreferrer`, which needs no permission. Our
+`AndroidManifest.xml` declares none.
+
+If you integrate only link resolution, none of the six apply to you.
+
 ## Documentation
 
 Full documentation is available at [tolinku.com/docs](https://tolinku.com/docs).

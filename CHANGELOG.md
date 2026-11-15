@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.1
+
+### Added
+
+- A Privacy section in the README, covering what the SDK sends and why this
+  package ships no `PrivacyInfo.xcprivacy`.
+
+  An audit of the five SDKs found the native iOS package shipping no privacy
+  manifest while the Flutter plugin shipped one, and both have been fixed in
+  their own 0.7.1. This package is the one where the honest answer is that it
+  does not need a manifest, and that answer was nowhere written down, so
+  anybody checking had to work out from the file tree that there is no native
+  iOS code here to declare.
+
+  Nothing in the package changed. The README now says what Apple requires of a
+  JavaScript-only package, which is nothing, which of our dependencies declare
+  the required-reason APIs on their own behalf, and maps each of the six
+  categories Apple's privacy label asks about to the call that causes it, so
+  you can fill in your own label without reading our source.
+
 ## 0.7.0
 
 ### Fixed
