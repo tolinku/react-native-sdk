@@ -73,7 +73,7 @@ export class Analytics {
    * Never throws. This runs on the path that routes the user somewhere, and a
    * tap that goes unrecorded is not worth interrupting that.
    */
-  async trackLinkOpen(url: string, userId?: string): Promise<void> {
+  async trackLinkOpen(url: string, userId?: string, deferred = false): Promise<void> {
     if (this.appOpensDisabled) return;
 
     const trimmed = typeof url === 'string' ? url.trim() : '';
@@ -100,6 +100,12 @@ export class Analytics {
           // identifies itself the same way on both. Without it an app open has
           // no platform and lands in a blank bucket on every breakdown.
           platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : undefined,
+          // Whether this open followed a deferred install. Only the app knows.
+          // An ordinary open is somebody who already had the app and can never
+          // convert to an install; an open after a deferred claim is the last
+          // stage of the install funnel. The server records them as different
+          // events and must not pool them.
+          ...(deferred ? { deferred: true } : {}),
           ...(userId ? { user_id: userId } : {}),
         },
       );

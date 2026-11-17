@@ -168,11 +168,11 @@ export class Tolinku {
    *
    * Never throws.
    */
-  static async trackLinkOpen(url: string): Promise<void> {
+  static async trackLinkOpen(url: string, deferred = false): Promise<void> {
     // Unlike track, a missing instance is not worth throwing over: this sits on
     // the path that routes the user somewhere.
     if (!Tolinku.analyticsInstance) return;
-    return Tolinku.analyticsInstance.trackLinkOpen(url, Tolinku._userId ?? undefined);
+    return Tolinku.analyticsInstance.trackLinkOpen(url, Tolinku._userId ?? undefined, deferred);
   }
 
   /**
