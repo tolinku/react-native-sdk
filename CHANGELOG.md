@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.9.0
+
+### Added
+
+- `DeferredLink.url`, the absolute URL for a claimed link.
+
+- `autoTrackLinkOpens` on `init`, which reports incoming links without you
+  wiring `trackLinkOpen` by hand.
+
+  It covers both ways a link arrives, the cold start and the listener, which is
+  the pair that is easy to get half right: instrumenting only the listener works
+  in every test done by hand with the app already open, and misses the more
+  common case.
+
+  Off by default, and it stays that way. A reported open is billed as a click,
+  so turning it on is a decision your app makes rather than one an upgrade makes
+  for you. It does not cover the open after a deferred install, because only
+  your app knows it just claimed a link.
+
+### Fixed
+
+- The deferred open documented in 0.8.0 could never actually be reported.
+
+  0.8.0 added the flag, and the only documented way to use it passed
+  `deepLinkPath`, a path. Every SDK drops anything without an http or https
+  scheme before it reaches the network, and the call never throws, so it failed
+  in silence on every platform. The server could not have accepted a path
+  either: the host is how it finds your Appspace and the only thing proving the
+  link is yours, and your device has no way to know it.
+
+  A claim now answers with `url` as well as `deep_link_path`, built from your
+  Appspace's own host. Report that. The scheme check is unchanged, because it is
+  the ownership check and not a validation nicety.
+
+  Older servers do not send the field, so it is optional.
+
 ## 0.8.0
 
 ### Added

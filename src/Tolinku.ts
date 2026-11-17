@@ -1,3 +1,4 @@
+import { Linking, type EmitterSubscription } from 'react-native';
 import { HttpClient } from './client';
 import { Analytics } from './analytics';
 import { Ecommerce } from './ecommerce';
@@ -49,6 +50,15 @@ export class Tolinku {
     Tolinku.init(config);
   }
 
+  /**
+   * Removes the automatic link listener, when one was installed.
+   *
+   * Held here rather than inside Analytics because it is a property of this
+   * configuration: destroy() has to take it back down or a reconfigured SDK
+   * reports every link twice.
+   */
+  private static linkSubscription: EmitterSubscription | null = null;
+
   static init(config: TolinkuConfig): void {
     if (!config.apiKey) throw new Error('Tolinku: apiKey is required');
 
@@ -93,7 +103,31 @@ export class Tolinku {
     Tolinku.linksInstance = new Links(Tolinku.client);
     Tolinku._initialized = true;
 
+    if (config.autoTrackLinkOpens === true) Tolinku.startAutoLinkTracking();
+
     debugLog(`Tolinku SDK v${SDK_VERSION} initialized (baseUrl=${baseUrl})`);
+  }
+
+  /**
+   * Report incoming links without the app wiring anything.
+   *
+   * A link arrives in two places and both need reporting: one that launches the
+   * app cold arrives at getInitialURL, one tapped while it is already running
+   * arrives at the listener. Instrumenting only the second is the common
+   * mistake, because it works in every test done by hand with the app open.
+   *
+   * Both are wired, and the same link arriving at both inside a few seconds is
+   * reported once: trackLinkOpen drops a repeat of the same URL, which is why
+   * covering both here is safe rather than double counting.
+   */
+  private static startAutoLinkTracking(): void {
+    Linking.getInitialURL()
+      .then((url) => { if (url) void Tolinku.trackLinkOpen(url); })
+      .catch(() => { /* a link that cannot be read is not worth a crash at launch */ });
+
+    Tolinku.linkSubscription = Linking.addEventListener('url', ({ url }) => {
+      if (url) void Tolinku.trackLinkOpen(url);
+    });
   }
 
   /** Check whether the SDK has been initialized. */
@@ -249,6 +283,11 @@ export class Tolinku {
 
     // Reset storage namespace
     resetStorageNamespace();
+
+    if (Tolinku.linkSubscription) {
+      Tolinku.linkSubscription.remove();
+      Tolinku.linkSubscription = null;
+    }
 
     // Clear all references
     Tolinku.client = null;

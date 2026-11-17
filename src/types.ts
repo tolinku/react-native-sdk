@@ -1,5 +1,5 @@
 /** SDK version */
-export const SDK_VERSION = '0.8.0';
+export const SDK_VERSION = '0.9.0';
 
 /** Configuration options for the Tolinku SDK */
 export interface TolinkuConfig {
@@ -11,6 +11,20 @@ export interface TolinkuConfig {
   debug?: boolean;
   /** Request timeout in milliseconds. Defaults to 30000 (30 seconds). */
   timeout?: number;
+  /**
+   * Report incoming links automatically, instead of calling trackLinkOpen by
+   * hand. Defaults to false.
+   *
+   * Off by default because a reported open is billed as a click. Turning this
+   * on by upgrading would raise somebody's bill without them asking, so it is
+   * a decision the app makes rather than one a release makes for it.
+   *
+   * Covers both ways a link arrives on React Native, the cold start and the
+   * listener, which is the pair that is easy to get half right by hand. It does
+   * not cover the open after a deferred install: only your app knows that it
+   * just claimed a link, so that one is still reported explicitly.
+   */
+  autoTrackLinkOpens?: boolean;
 }
 
 /** Resolved configuration with all defaults applied */
@@ -110,6 +124,15 @@ export interface LeaderboardEntry {
 export interface DeferredLink {
   deep_link_path: string;
   appspace_id: string;
+  /**
+   * The absolute URL for this link, for reporting the open that follows.
+   *
+   * Reporting an open needs the whole URL, not the path: the host is how the
+   * server finds the Appspace and the only thing proving the link belongs to
+   * it, and the device has no way to know it. Absent from servers older than
+   * this field, so treat it as optional.
+   */
+  url?: string;
   referrer_id?: string;
   referral_code?: string;
 }
