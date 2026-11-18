@@ -55,6 +55,16 @@ export class Analytics {
    */
   private lastOpenUrl: string | null = null;
   private lastOpenAt = 0;
+  /**
+   * Part of the key, not carried alongside it. An ordinary open and a deferred
+   * one are different events on the server and only the app can tell them
+   * apart, so a deferred report just after an ordinary one for the same link is
+   * new information rather than a repeat. Keyed on the URL alone, somebody who
+   * tapped a link, installed, then tapped it again would have the deferred
+   * report swallowed, losing the last stage of the install funnel in the one
+   * case it exists to show.
+   */
+  private lastOpenDeferred = false;
   private static readonly OPEN_DEDUPE_MS = 5000;
 
 
@@ -87,9 +97,14 @@ export class Analytics {
     if (!isSafeUrl(trimmed)) return;
 
     const now = Date.now();
-    if (this.lastOpenUrl === trimmed && now - this.lastOpenAt < Analytics.OPEN_DEDUPE_MS) return;
+    if (
+      this.lastOpenUrl === trimmed &&
+      this.lastOpenDeferred === deferred &&
+      now - this.lastOpenAt < Analytics.OPEN_DEDUPE_MS
+    ) return;
     this.lastOpenUrl = trimmed;
     this.lastOpenAt = now;
+    this.lastOpenDeferred = deferred;
 
     try {
       const result = await this.client.postPublic<{ attribute?: boolean }>(
