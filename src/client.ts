@@ -103,6 +103,61 @@ export class HttpClient {
     });
   }
 
+  /**
+   * The hostname of the configured API, lowercased and without a port, for
+   * telling whether some other URL points at the same host. Empty if the base
+   * URL cannot be read, which init's validation should already have ruled out.
+   */
+  get apiHostname(): string {
+    const match = /^https?:\/\/(?:[^/?#@]*@)?([^/?#]+)/i.exec(this.baseUrl);
+    return match ? hostnameOf(match[1]!) : '';
+  }
+
+  /** Whether there is a key to send, so callers can skip a call that would only be refused. */
+  get hasApiKey(): boolean {
+    return typeof this.apiKey === 'string' && this.apiKey.length > 0;
+  }
+
+  /**
+   * POST once, without the API key, to a host other than the configured one,
+   * and hand back whatever came back, whatever the status.
+   *
+   * For a question that must not be asked twice: no retries, and its own time
+   * limit rather than the client's. Throws only when there is no reply at all
+   * (a network failure, the time limit, or a destroyed client).
+   */
+  async postPublicOnceToOrigin(
+    origin: string,
+    path: string,
+    body: Record<string, unknown>,
+    timeoutMs: number,
+  ): Promise<OnceReply> {
+    return this.executeOnce(origin.replace(/\/+$/, '') + path, {
+      method: 'POST',
+      headers: {
+        ...this.publicHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    }, timeoutMs);
+  }
+
+  /**
+   * POST once, with the API key, to the configured API. Same terms as
+   * {@link postPublicOnceToOrigin}: one attempt, its own time limit, the reply
+   * handed back whatever its status.
+   */
+  async postOnce(path: string, body: Record<string, unknown>, timeoutMs: number): Promise<OnceReply> {
+    return this.executeOnce(this.baseUrl + path, {
+      method: 'POST',
+      headers: {
+        ...this.authenticatedHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    }, timeoutMs);
+  }
+
   /** POST without API key auth (for public endpoints like deferred claim) */
   async postPublic<T>(path: string, body?: Record<string, unknown>): Promise<T> {
     return this.executeWithRetry<T>(this.baseUrl + path, {
@@ -140,6 +195,43 @@ export class HttpClient {
       'Accept': 'application/json',
       'User-Agent': `TolinkuReactNativeSDK/${SDK_VERSION}`,
     };
+  }
+
+  /**
+   * One request, one attempt, aborted after `timeoutMs`. The body is read as
+   * JSON when it is JSON and left undefined when it is not, so the caller can
+   * tell a reply from our own server apart from somebody else's error page.
+   */
+  private async executeOnce(url: string, init: RequestInit, timeoutMs: number): Promise<OnceReply> {
+    if (this.destroyed) {
+      throw new TolinkuError('Tolinku: client has been destroyed. Call Tolinku.init() to reinitialize.', 0);
+    }
+
+    const controller = new AbortController();
+    this.pendingControllers.add(controller);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const res = await fetch(url, { ...init, signal: controller.signal });
+      let body: unknown;
+      try {
+        body = JSON.parse(await res.text());
+      } catch {
+        body = undefined;
+      }
+      return { status: res.status, body };
+    } catch (err) {
+      if (this.destroyed) {
+        throw new TolinkuError('Tolinku: request aborted (client destroyed).', 0);
+      }
+      if (isAbortError(err)) {
+        throw new TolinkuError(`Tolinku: request timed out after ${timeoutMs}ms`, 0);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+      this.pendingControllers.delete(controller);
+    }
   }
 
   /**
@@ -256,6 +348,18 @@ export class HttpClient {
     // Should not reach here, but just in case
     throw lastError || new TolinkuError('Tolinku: request failed after retries', 0);
   }
+}
+
+/** A reply to a single attempt: its status, and its body if that was JSON. */
+export interface OnceReply {
+  status: number;
+  body: unknown;
+}
+
+/** The hostname of a host[:port] authority, lowercased, without the port. */
+export function hostnameOf(authority: string): string {
+  const match = /^(\[[^\]]*\]|[^:]*)/.exec(authority);
+  return (match ? match[1]! : authority).toLowerCase();
 }
 
 function sleep(ms: number): Promise<void> {
