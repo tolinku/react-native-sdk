@@ -108,14 +108,27 @@ function answerIn(reply: OnceReply): ResolvedLink | null {
 }
 
 /**
- * Whether a reply came from Tolinku itself: JSON with a string `error`, at any
- * status. That host is ours and has given its answer.
+ * Whether a reply came from Tolinku itself, so that host is ours and has given
+ * its answer, at any status. An email platform's host can answer in JSON with a
+ * string `error` too, so the body alone proves nothing: Tolinku marks its
+ * answers with `X-Tolinku: 1`. A server from before that header sends none, so
+ * for one the error body is trusted only when the link is on Tolinku's own
+ * domain: the API's host, or a host under its parent domain.
  */
-function isTolinkuReply(reply: OnceReply): boolean {
+function isTolinkuReply(reply: OnceReply, hostname: string, apiHostname: string): boolean {
+  if (reply.tolinku) return true;
   const body = reply.body;
-  return typeof body === 'object'
+  const hasError = typeof body === 'object'
     && body !== null
     && typeof (body as { error?: unknown }).error === 'string';
+  return hasError && isTolinkuDomain(hostname, apiHostname);
+}
+
+function isTolinkuDomain(hostname: string, apiHostname: string): boolean {
+  if (!apiHostname) return false;
+  if (hostname === apiHostname) return true;
+  const labels = apiHostname.split('.');
+  return labels.length > 2 && hostname.endsWith('.' + labels.slice(-2).join('.'));
 }
 
 export class Links {
@@ -132,8 +145,10 @@ export class Links {
    * email platform's click tracking domain, which knows nothing about routes,
    * and the API can unwrap it.
    *
-   * Each question is asked once, with a five second limit. Asking a click
-   * tracking host again would count the email click again.
+   * Each question is asked once, with a five second limit. The server
+   * unwraps an email link once, which is how the email platform counts the
+   * click (Tolinku records no click of its own), so asking again could count it
+   * twice.
    *
    * Never throws. A link that cannot be resolved, for a bad network or any
    * other reason, is one the app should fall back to its own handling for, and
@@ -174,8 +189,8 @@ export class Links {
       const found = answerIn(direct);
       if (found) return found;
       // Tolinku's own "no": the host is ours and has answered. Asking the API
-      // as well would count the click twice.
-      if (isTolinkuReply(direct)) return null;
+      // as well would only repeat the question.
+      if (isTolinkuReply(direct, link.hostname, this.client.apiHostname)) return null;
     }
 
     // No reply, or one that is not Tolinku's: the normal answer from a click

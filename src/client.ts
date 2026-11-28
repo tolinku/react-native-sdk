@@ -219,7 +219,8 @@ export class HttpClient {
       } catch {
         body = undefined;
       }
-      return { status: res.status, body };
+      // X-Tolinku: 1 is on every answer Tolinku's own API gives; another host won't send it.
+      return { status: res.status, body, tolinku: res.headers?.get?.('X-Tolinku') === '1' };
     } catch (err) {
       if (this.destroyed) {
         throw new TolinkuError('Tolinku: request aborted (client destroyed).', 0);
@@ -350,10 +351,11 @@ export class HttpClient {
   }
 }
 
-/** A reply to a single attempt: its status, and its body if that was JSON. */
+/** A reply to a single attempt: its status, its body if that was JSON, and whether Tolinku marked it as its own (X-Tolinku: 1). */
 export interface OnceReply {
   status: number;
   body: unknown;
+  tolinku?: boolean;
 }
 
 /** The hostname of a host[:port] authority, lowercased, without the port. */

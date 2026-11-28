@@ -26,10 +26,10 @@ const answer: ResolvedLink = {
 
 const KEY = 'tolk_pub_test_key';
 
-type Reply = { status: number; body: string } | Error;
+type Reply = { status: number; body: string; tolinku?: boolean } | Error;
 
-function json(status: number, body: unknown): Reply {
-  return { status, body: JSON.stringify(body) };
+function json(status: number, body: unknown, tolinku = false): Reply {
+  return { status, body: JSON.stringify(body), tolinku };
 }
 
 const ok = json(200, answer);
@@ -50,7 +50,7 @@ function replies(...queue: Reply[]): jest.Mock {
       ok: next.status >= 200 && next.status < 300,
       status: next.status,
       statusText: '',
-      headers: { get: () => null },
+      headers: { get: (name: string) => (next.tolinku && name.toLowerCase() === 'x-tolinku' ? '1' : null) },
       text: async () => next.body,
       json: async () => JSON.parse(next.body),
     };
@@ -144,14 +144,31 @@ describe('what it declines to ask about', () => {
 
 describe("Tolinku's own answer from the link host", () => {
   it.each([
-    ['a 404 with error', tolinkuNotFound],
-    ['a 404 with error and web_url', tolinkuNotFoundWithWebUrl],
-    ['a 500 with error', json(500, { error: 'Internal error' })],
-    ['a 200 with error', json(200, { error: 'Odd' })],
-  ])('is final on %s: null, and no fallback', async (_label, reply) => {
+    ['a 404 with error', json(404, { error: 'Route not found' }, true)],
+    ['a 404 with error and web_url', json(404, { error: 'Route not found', web_url: 'https://example.com/fallback' }, true)],
+    ['a 500 with error', json(500, { error: 'Internal error' }, true)],
+    ['a 200 with error', json(200, { error: 'Odd' }, true)],
+    ['a marked reply without an error field', json(404, { message: 'no' }, true)],
+  ])('is final on %s when marked X-Tolinku: null, and no fallback', async (_label, reply) => {
     replies(reply, ok);
     expect(await makeLinks().resolve('https://url1234.email.brand.com/uni/ls/click?upn=XYZ')).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['a 404 with error', tolinkuNotFound],
+    ['a 404 with error and web_url', tolinkuNotFoundWithWebUrl],
+    ['a 500 with error', json(500, { error: 'Internal error' })],
+  ])('from a server without the header, is final on %s only on Tolinku\'s own domain', async (_label, reply) => {
+    replies(reply, ok);
+    expect(await makeLinks().resolve('https://links.tolinku.com/s7k2p9q/4821')).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('an email platform\'s JSON error without the header does not stop the unwrap', async () => {
+    replies(json(404, { error: 'Link not found' }), ok);
+    expect(await makeLinks().resolve('https://url1234.email.brand.com/uni/ls/click?upn=XYZ')).toEqual(answer);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -229,8 +246,8 @@ describe('one attempt each', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('does not retry the link host on a 429', async () => {
-    replies(json(429, { error: 'Too many requests' }), ok, ok);
+  it('does not retry the link host on a 429 from Tolinku', async () => {
+    replies(json(429, { error: 'Too many requests' }, true), ok, ok);
     expect(await makeLinks().resolve(wrapped)).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
