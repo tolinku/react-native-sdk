@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import type { Message, MessageAppContext, ShowMessageOptions } from '../types';
 import { isMessageDismissed, isMessageSuppressed, recordMessageImpression } from '../storage';
+import { matchesTriggerValue, messageQuery } from './query';
 import { MessageModal } from './MessageModal';
 import { Tolinku } from '../Tolinku';
 import { debugWarn } from '../debug';
@@ -58,10 +59,7 @@ export function TolinkuMessages({
     async function fetchMessages() {
       try {
         const client = Tolinku.getClient();
-        const params: Record<string, string> = {};
-        if (trigger) params.trigger = trigger;
-        const userId = Tolinku.getUserId();
-        if (userId) params.user_id = userId;
+        const params = messageQuery(trigger, triggerValue, Tolinku.getUserId());
 
         const data = await client.get<{ messages: Message[]; app?: MessageAppContext }>('/v1/api/messages', params);
         if (cancelled) return;
@@ -73,7 +71,7 @@ export function TolinkuMessages({
         // Filter dismissed/suppressed messages and optionally by triggerValue
         const candidates: Message[] = [];
         for (const m of data.messages) {
-          if (triggerValue && m.trigger_value !== triggerValue) continue;
+          if (!matchesTriggerValue(m, triggerValue)) continue;
           const dismissed = await isMessageDismissed(m.id, m.dismiss_days);
           if (dismissed) continue;
           const suppressed = await isMessageSuppressed(m.id, m.max_impressions, m.min_interval_hours);

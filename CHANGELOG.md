@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.3
+
+### Fixed
+
+- `<TolinkuMessages triggerValue="...">` sends the name to the server as
+  `trigger_value`, and keeps messages of the trigger that name no event or
+  milestone, the same as the server does. It used to filter only on the device
+  and drop those messages, so a message set to show on any event never showed
+  when a name was given.
+- The close mark is visible on any message. It was dark text at 60% on a faint
+  disc, which vanished on a dark message; it is now a white X on a dark disc.
+  It looks the same size, and answers taps across 44 by 44.
+
 ## 0.8.2
 
 ### Changed

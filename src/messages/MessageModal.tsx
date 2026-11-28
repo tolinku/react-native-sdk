@@ -95,6 +95,7 @@ export function MessageModal({ message, visible, onClose, options, app }: Messag
           <TouchableOpacity
             onPress={handleDismiss}
             style={styles.closeButton}
+            hitSlop={CLOSE_HIT_SLOP}
             accessibilityLabel="Close message"
             accessibilityRole="button"
           >
@@ -132,6 +133,12 @@ export function MessageModal({ message, visible, onClose, options, app }: Messag
   );
 }
 
+/** Black at 45%, behind the white X. */
+const CLOSE_DISC_COLOR = 'rgba(0,0,0,0.45)';
+
+/** Grows the 28pt close disc to a 44pt tap area without moving or resizing it. */
+const CLOSE_HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
+
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
@@ -150,12 +157,15 @@ const styles = StyleSheet.create({
     shadowRadius: 30,
     elevation: 10,
   },
+  // A white X on a dark disc, so the close shows on a card of any colour. It
+  // used to be the default (dark) text at 60% on a faint disc, which vanished
+  // on a dark card.
   closeButton: {
     position: 'absolute',
     top: 12,
     right: 12,
     zIndex: 10,
-    backgroundColor: 'rgba(0,0,0,0.1)',
+    backgroundColor: CLOSE_DISC_COLOR,
     borderRadius: 14,
     width: 28,
     height: 28,
@@ -165,7 +175,7 @@ const styles = StyleSheet.create({
   closeText: {
     fontSize: 18,
     lineHeight: 20,
-    opacity: 0.6,
+    color: '#ffffff',
   },
   scrollContent: {
     marginTop: 8,
